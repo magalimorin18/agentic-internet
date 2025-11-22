@@ -22,6 +22,33 @@ function generateAgentIdentity(
   };
 }
 
+function extractConfidence(text: string): number | undefined {
+  const patterns: Array<{ pattern: RegExp; isPercentage: boolean }> = [
+    { pattern: /confidence[:\s]+([0-9]*\.?[0-9]+)/i, isPercentage: false },
+    { pattern: /([0-9]*\.?[0-9]+)\s*\/\s*1\b/, isPercentage: false },
+    { pattern: /([0-9]*\.?[0-9]+)%/, isPercentage: true },
+    { pattern: /\b(0\.[0-9]+)\b/, isPercentage: false },
+    { pattern: /\b(1\.0)\b/, isPercentage: false },
+  ];
+
+  for (const { pattern, isPercentage } of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      let value = parseFloat(match[1]);
+      // If it's a percentage pattern, convert to decimal
+      if (isPercentage) {
+        value = value / 100;
+      }
+      // Ensure it's between 0 and 1
+      if (value >= 0 && value <= 1) {
+        return Math.round(value * 100) / 100; // Round to 2 decimal places
+      }
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Creates an A2A message
  */
@@ -114,6 +141,9 @@ Keep it concise and direct.`;
 
     const peerReview = peerResponse.output ?? "Unable to provide review.";
 
+    // Extract confidence from peer review
+    const peerConfidence = extractConfidence(peerReview);
+
     // Create A2A messages
     messages.push(
       createA2AMessage(
@@ -133,7 +163,7 @@ Keep it concise and direct.`;
         peerReview,
         claimId,
         {
-          confidence: 0.75, // This could be extracted from the response
+          confidence: peerConfidence,
         }
       )
     );
@@ -228,6 +258,16 @@ This will be recorded on Hedera. Be concise.`;
 
     const settlementMessage = messages[messages.length - 1];
 
+    // Calculate final confidence from peer review or default to 0.5
+    // Look for confidence in the peer response message
+    const peerResponseMessage = messages.find(
+      (msg) => msg.type === "response" && msg.from === peerAgentId
+    );
+    const finalConfidence =
+      peerResponseMessage?.metadata?.confidence ??
+      extractConfidence(peerReview) ??
+      0.5;
+
     // Build discussion object
     const discussion: AgentDiscussion = {
       claimId: claimId || "unknown",
@@ -236,7 +276,7 @@ This will be recorded on Hedera. Be concise.`;
       messages,
       finalAgreement: {
         status: finalStatus,
-        confidence: 0.75,
+        confidence: finalConfidence,
         settlementHash: settlementMessage.metadata?.settlementHash,
         settlementError: settlementMessage.metadata?.settlementError,
       },

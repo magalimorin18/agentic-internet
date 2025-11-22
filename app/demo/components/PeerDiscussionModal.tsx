@@ -203,7 +203,7 @@ export default function PeerDiscussionModal({
             {/* Final Agreement */}
             {discussion.finalAgreement && (
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className="text-xs font-semibold text-gray-600">
                     Result:
                   </span>
@@ -218,6 +218,29 @@ export default function PeerDiscussionModal({
                   >
                     {discussion.finalAgreement.status.toUpperCase()}
                   </span>
+                  {discussion.finalAgreement.confidence !== undefined && (
+                    <>
+                      <span className="text-xs font-semibold text-gray-600 ml-2">
+                        Confidence:
+                      </span>
+                      <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+                        {(discussion.finalAgreement.confidence * 100).toFixed(
+                          0
+                        )}
+                        %
+                      </span>
+                      <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden ml-2">
+                        <div
+                          className="h-full bg-blue-500 transition-all"
+                          style={{
+                            width: `${
+                              discussion.finalAgreement.confidence * 100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
                 {discussion.finalAgreement.settlementHash ? (
                   <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
