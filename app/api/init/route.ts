@@ -21,13 +21,26 @@ export async function POST(req: NextRequest) {
   try {
     const userAccountId = process.env.HEDERA_ACCOUNT_ID || "0.0.7305752";
 
-    // Get URL from request body
+    // Get URL and number of peer reviewers from request body
     const body = await req.json();
     const url = body.url;
+    const numPeerReviewers = body.numPeerReviewers || 2; // Default to 2 if not provided
 
     if (!url) {
       return Response.json(
         { message: "URL is required", error: "Missing URL parameter" },
+        { status: 400 }
+      );
+    }
+
+    // Validate numPeerReviewers
+    const numReviewers = parseInt(String(numPeerReviewers), 10);
+    if (isNaN(numReviewers) || numReviewers < 1) {
+      return Response.json(
+        {
+          message: "Invalid number of peer reviewers",
+          error: "numPeerReviewers must be a positive integer",
+        },
         { status: 400 }
       );
     }
@@ -43,7 +56,7 @@ export async function POST(req: NextRequest) {
     const summary = agentResponse.output ?? "No summary available";
 
     // Step 2: Ask agent to generate search terms for finding related articles
-    const searchTermsPrompt = `Based on the article summary you just provided, generate a Google search query (2-5 keywords) that would help find 2 related articles on the same topic.
+    const searchTermsPrompt = `Based on the article summary you just provided, generate a Google search query (2-5 keywords) that would help find ${numReviewers} related articles on the same topic.
 
 The search query should be specific enough to find relevant articles but broad enough to find multiple results.
 
@@ -82,7 +95,7 @@ Respond with ONLY the search query, nothing else. Example: "passwordless authent
     const relatedArticles: RelatedArticle[] = [];
 
     try {
-      const searchResults = await searchGoogle(searchQuery, 2);
+      const searchResults = await searchGoogle(searchQuery, numReviewers);
 
       if (searchResults.length > 0) {
         // Fetch summaries for each article
