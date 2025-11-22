@@ -6,12 +6,14 @@ import type { AgentDiscussion, A2AMessage } from "@/types/a2a";
 type PeerDiscussionModalProps = {
   claim: { id: string; claim: string; score?: number };
   url?: string;
+  relatedArticleUrl?: string; // Specific related article URL to use for peer agent
   onClose: () => void;
 };
 
 export default function PeerDiscussionModal({
   claim,
   url,
+  relatedArticleUrl,
   onClose,
 }: PeerDiscussionModalProps) {
   const [discussion, setDiscussion] = useState<AgentDiscussion | null>(null);
@@ -39,6 +41,12 @@ export default function PeerDiscussionModal({
       console.error("Error reading related articles:", error);
     }
 
+    // If a specific related article URL is provided, use only that one
+    // Otherwise, use all related articles (API will pick the first one)
+    const articlesToSend = relatedArticleUrl
+      ? [{ url: relatedArticleUrl, summary: "" }]
+      : relatedArticles || [];
+
     try {
       const response = await fetch("/api/agents/discuss", {
         method: "POST",
@@ -49,7 +57,7 @@ export default function PeerDiscussionModal({
           url,
           claim: claim.claim,
           claimId: claim.id,
-          relatedArticles: relatedArticles || [],
+          relatedArticles: articlesToSend,
         }),
       });
 
@@ -68,7 +76,7 @@ export default function PeerDiscussionModal({
     } finally {
       setIsLoading(false);
     }
-  }, [url, claim]);
+  }, [url, claim, relatedArticleUrl]);
 
   useEffect(() => {
     if (claim && url) {
