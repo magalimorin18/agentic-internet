@@ -6,9 +6,45 @@ import { useState } from "react";
 export default function DemoInput() {
   const router = useRouter();
   const [url, setUrl] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleSubmit() {
-    router.push(`/demo/agent?url=${encodeURIComponent(url)}`);
+  async function handleSubmit() {
+    if (!url.trim()) {
+      alert("Please enter a URL");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Initialize the agent with the URL
+      const response = await fetch("/api/init", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to initialize agent");
+      }
+
+      console.log("Agent initialized:", data);
+
+      // Navigate to the agent page after successful initialization
+      router.push(`/demo/agent?url=${encodeURIComponent(url)}`);
+    } catch (error) {
+      console.error("Error initializing agent:", error);
+      alert(
+        `Failed to initialize agent: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function handleInitAgent() {
@@ -33,14 +69,21 @@ export default function DemoInput() {
       <input
         className="border p-3 rounded w-full"
         placeholder="Paste research paper URL..."
+        value={url}
         onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !isLoading) {
+            handleSubmit();
+          }
+        }}
       />
 
       <button
         onClick={handleSubmit}
-        className="mt-4 px-5 py-2 bg-black text-white rounded-xl"
+        disabled={isLoading}
+        className="mt-4 px-5 py-2 bg-black text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Create Agent
+        {isLoading ? "Initializing Agent..." : "Create Agent"}
       </button>
 
       <button

@@ -13,16 +13,20 @@ type ResponseData = {
 export async function POST(req: NextRequest) {
   try {
     const userAccountId = "0.0.7305752";
-    // Hardcoded URL for testing
-    const url =
-      "https://medium.com/@53.morin.magali/tired-of-remembering-passwords-youll-never-need-them-again-1ae6097ffdd6";
 
-    // Initialize the agent with the URL
+    // Get URL from request body
+    const body = await req.json();
+    const url = body.url;
+
+    if (!url) {
+      return Response.json(
+        { message: "URL is required", error: "Missing URL parameter" },
+        { status: 400 }
+      );
+    }
+
     const agentExecutor = await initializeAgent(userAccountId, url);
-    console.log("🚀Agent initialized with URL:", url);
-    console.log("🚀agentExecutor", agentExecutor);
 
-    // Ask the agent to summarize what it knows about the URL
     const agentResponse = await agentExecutor.invoke({
       input:
         "Please provide a summary of the content from the URL you were initialized with. What is the main information available?",
