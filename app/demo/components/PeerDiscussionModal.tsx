@@ -382,10 +382,6 @@ export default function PeerDiscussionModal({
 
               return (
                 <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                    Parallel Discussions
-                  </h4>
-
                   {/* Display threads in a grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     {conversationThreads.map((thread) => {
@@ -566,7 +562,7 @@ export default function PeerDiscussionModal({
 
             {isLoading && (
               <div className="text-center py-8">
-                <p className="text-gray-600">Agent discussing...</p>
+                <p className="text-gray-600">Agents debating...</p>
                 <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
               </div>
             )}

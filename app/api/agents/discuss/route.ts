@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
 Peer Reviews:
 ${allReviews}
 
-Based on these reviews, prepare 1-2 follow-up questions or points for debate. Focus on areas where there might be disagreement or need clarification. Be concise (1-2 sentences per question).`;
+Based on these reviews, prepare 1-2 VERY BRIEF follow-up questions or points for debate. Focus on areas where there might be disagreement. Be extremely concise (1 sentence per question max).`;
 
           const followUpTaskParams: StartTaskParams = {
             taskType: "claim_validation",
@@ -409,13 +409,12 @@ Your initial review was already provided. Now, the primary agent has raised thes
 
 ${followUpQuestions}
 
-Please respond to these questions or points. You can:
+Please respond VERY BRIEFLY (1 sentence max). You can:
 - Clarify your position
-- Provide additional evidence
-- Challenge or support other viewpoints
-- Refine your confidence level
+- Provide key evidence
+- Challenge or support viewpoints
 
-Be concise but substantive (2-3 sentences).`;
+Be extremely concise.`;
 
                 const debateTaskParams: StartTaskParams = {
                   taskType: "claim_review",
@@ -514,7 +513,7 @@ Be concise but substantive (2-3 sentences).`;
 Other peer agents have responded:
 ${otherResponses}
 
-Provide a brief final thought (1-2 sentences) considering these viewpoints. You can agree, disagree, or add nuance.`;
+Provide a VERY brief final thought (1 sentence max) considering these viewpoints. You can agree, disagree, or add nuance.`;
 
                   const crossDebateTaskParams: StartTaskParams = {
                     taskType: "claim_review",
@@ -597,10 +596,12 @@ ${allReviews}
 
 ${followUpQuestions ? `Follow-up Discussion:\n${allDebateResponses}\n\n` : ""}
 
-Based on the complete discussion above, provide a final synthesis:
+Based on the complete discussion above, provide a VERY BRIEF final synthesis:
 - Overall agreement level: "agreed", "disagreed", or "partial"
-- Brief explanation summarizing the key points from the debate (2-3 sentences)
-- Final confidence (0-1)`;
+- Brief explanation (1-2 sentences max)
+- Final confidence (0-1)
+
+Be extremely concise.`;
 
           const synthesisTaskParams: StartTaskParams = {
             taskType: "claim_validation",

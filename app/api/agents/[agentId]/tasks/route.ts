@@ -162,12 +162,11 @@ async function handleStartTask(
 
       const prompt = `Review this claim: "${claim}"
 
-Provide a BRIEF assessment (2-3 sentences max):
-- Agree or disagree?
+Provide a VERY BRIEF assessment (1-2 sentences max):
+- Agree or disagree with brief reason?
 - Confidence level (0-1)?
-- Key evidence (one sentence)?
 
-Keep it concise and direct.`;
+Be extremely concise - one sentence preferred.`;
 
       const response = await executor.invoke({ input: prompt });
       result = response.output ?? "Unable to provide review.";
