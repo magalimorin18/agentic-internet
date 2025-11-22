@@ -334,9 +334,9 @@ export default function PeerDiscussionModal({
               })}
             </div>
 
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600">
-                <strong>Debate:</strong> {claim.claim}
+            <div className="mb-6 p-5 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-base text-gray-700 leading-relaxed">
+                <strong className="text-lg">Debate:</strong> {claim.claim}
               </p>
             </div>
 
