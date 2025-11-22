@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     const agentResponse = await agentExecutor.invoke({
       input:
-        "Please provide a summary of the content from the URL you were initialized with. What is the main information available?",
+        "Please provide a summary of the content from the URL you were initialized with. What is the main information available? The summary should be short, one paragraph only",
     });
 
     const response: ResponseData = {

@@ -33,7 +33,19 @@ export default function AgentIdentity({ url }: { url: string }) {
     <div className="p-4 border rounded-xl mb-6 bg-gray-50">
       <h3 className="font-semibold text-lg mb-2">Agent Identity</h3>
       <p className="mb-2">
-        <strong>Source:</strong> {url}
+        <strong>Source:</strong>{" "}
+        {url && (url.startsWith("http://") || url.startsWith("https://")) ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            {url}
+          </a>
+        ) : (
+          url
+        )}
       </p>
       {initResult && (
         <>
