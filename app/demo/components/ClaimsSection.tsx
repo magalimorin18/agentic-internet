@@ -23,8 +23,7 @@ export default function ClaimsSection({ url }: ClaimsSectionProps) {
         <h3 className="text-xl font-semibold">Extracted Claims</h3>
         <GetClaimsButton url={url} onClaimsFetched={setClaims} />
       </div>
-      <ClaimsTable claims={claims ?? undefined} />
+      <ClaimsTable claims={claims ?? undefined} url={url} />
     </>
   );
 }
-

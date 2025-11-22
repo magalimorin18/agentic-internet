@@ -11,10 +11,12 @@ type Claim = {
 
 type ClaimsTableProps = {
   claims?: Claim[];
+  url?: string;
 };
 
 export default function ClaimsTable({
   claims: initialClaims,
+  url,
 }: ClaimsTableProps = {}) {
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
   // Use props if provided, otherwise show empty state (prompting user to click GET CLAIMS)
@@ -60,6 +62,7 @@ export default function ClaimsTable({
       {selectedClaim && (
         <PeerDiscussionModal
           claim={selectedClaim}
+          url={url}
           onClose={() => setSelectedClaim(null)}
         />
       )}
