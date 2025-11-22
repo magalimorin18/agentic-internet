@@ -2,10 +2,23 @@
 
 import { useState } from "react";
 import PeerDiscussionModal from "./PeerDiscussionModal";
-import { mockClaims } from "@/libs/mockClaims";
 
-export default function ClaimsTable() {
-  const [selectedClaim, setSelectedClaim] = useState<any | null>(null);
+type Claim = {
+  id: string;
+  claim: string;
+  score?: number;
+};
+
+type ClaimsTableProps = {
+  claims?: Claim[];
+};
+
+export default function ClaimsTable({
+  claims: initialClaims,
+}: ClaimsTableProps = {}) {
+  const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
+  // Use props if provided, otherwise show empty state (prompting user to click GET CLAIMS)
+  const claims = initialClaims !== undefined ? initialClaims : [];
 
   return (
     <div>
@@ -18,20 +31,29 @@ export default function ClaimsTable() {
           </tr>
         </thead>
         <tbody>
-          {mockClaims.map((c) => (
-            <tr key={c.id} className="border-t">
-              <td className="p-3">{c.claim}</td>
-              <td className="p-3">{c.score}</td>
-              <td className="p-3">
-                <button
-                  onClick={() => setSelectedClaim(c)}
-                  className="px-4 py-1 bg-black text-white rounded-lg"
-                >
-                  Ask another agent
-                </button>
+          {claims.length === 0 ? (
+            <tr>
+              <td colSpan={3} className="p-3 text-center text-gray-500">
+                No claims extracted yet. Click &quot;GET CLAIMS&quot; to extract
+                claims from the agent&apos;s knowledge.
               </td>
             </tr>
-          ))}
+          ) : (
+            claims.map((c) => (
+              <tr key={c.id} className="border-t">
+                <td className="p-3">{c.claim}</td>
+                <td className="p-3">{c.score ?? "—"}</td>
+                <td className="p-3">
+                  <button
+                    onClick={() => setSelectedClaim(c)}
+                    className="px-4 py-1 bg-black text-white rounded-lg"
+                  >
+                    Ask another agent
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
 

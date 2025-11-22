@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import AgentIdentity from "../components/AgentIdentity";
-import ClaimsTable from "../components/ClaimsTable";
+import ClaimsSection from "../components/ClaimsSection";
 
 export default async function AgentPage({ searchParams }: any) {
   const resolvedSearchParams = await searchParams;
@@ -12,8 +12,7 @@ export default async function AgentPage({ searchParams }: any) {
 
       <AgentIdentity url={url} />
 
-      <h3 className="text-xl font-semibold mb-3">Extracted Claims</h3>
-      <ClaimsTable />
+      <ClaimsSection url={url} />
     </main>
   );
 }
