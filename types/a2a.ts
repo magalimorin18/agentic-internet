@@ -33,6 +33,7 @@ export interface AgentIdentity {
   publicKey?: string;
   name: string;
   role?: string; // e.g., "Primary Agent", "Peer Reviewer", "Skeptical Agent"
+  sourceUrl?: string; // URL of the article this agent is based on
 }
 
 export interface AgentDiscussion {
@@ -46,4 +47,3 @@ export interface AgentDiscussion {
     settlementHash?: string;
   };
 }
-

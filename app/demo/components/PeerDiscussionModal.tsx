@@ -27,6 +27,18 @@ export default function PeerDiscussionModal({
     setIsLoading(true);
     setError(null);
 
+    // Get related articles from sessionStorage
+    let relatedArticles: Array<{ url: string; summary: string }> | undefined;
+    try {
+      const stored = sessionStorage.getItem("agentInitResult");
+      if (stored) {
+        const initResult = JSON.parse(stored);
+        relatedArticles = initResult.relatedArticles;
+      }
+    } catch (error) {
+      console.error("Error reading related articles:", error);
+    }
+
     try {
       const response = await fetch("/api/agents/discuss", {
         method: "POST",
@@ -37,6 +49,7 @@ export default function PeerDiscussionModal({
           url,
           claim: claim.claim,
           claimId: claim.id,
+          relatedArticles: relatedArticles || [],
         }),
       });
 
@@ -122,12 +135,27 @@ export default function PeerDiscussionModal({
         {discussion && (
           <>
             {/* Agent Identities */}
-            <div className="mb-3 p-2 bg-blue-50 rounded-lg">
-              <div className="flex gap-3 text-xs">
+            <div className="mb-3 p-3 bg-blue-50 rounded-lg">
+              <div className="space-y-2">
                 {discussion.agents.map((agent) => (
-                  <span key={agent.id} className="font-semibold text-gray-700">
-                    {agent.name}
-                  </span>
+                  <div key={agent.id} className="text-xs">
+                    <span className="font-semibold text-gray-700">
+                      {agent.name}
+                    </span>
+                    {agent.sourceUrl && (
+                      <div className="mt-1">
+                        <span className="text-gray-600">Source: </span>
+                        <a
+                          href={agent.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline break-all"
+                        >
+                          {agent.sourceUrl}
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

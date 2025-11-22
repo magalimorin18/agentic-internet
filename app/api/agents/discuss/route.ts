@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
     // Get request body
     const body = await req.json();
-    const { url, claim, claimId } = body;
+    const { url, claim, claimId, relatedArticles } = body;
 
     if (!url || !claim) {
       return Response.json(
@@ -62,24 +62,38 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Initialize primary agent (the original agent)
+    // Select a related article URL for the peer agent
+    // Use the first related article if available, otherwise fall back to main URL
+    let peerAgentUrl = url;
+    if (
+      relatedArticles &&
+      Array.isArray(relatedArticles) &&
+      relatedArticles.length > 0
+    ) {
+      // Use the first related article URL
+      peerAgentUrl = relatedArticles[0].url || url;
+    }
+
+    // Initialize primary agent (the original agent) with main URL
     const primaryAgentId = "agent_primary";
     const primaryAgent = generateAgentIdentity(
       primaryAgentId,
       "Primary Agent",
       "Document Analyzer"
     );
+    primaryAgent.sourceUrl = url;
 
-    // Initialize peer agent (second opinion)
+    // Initialize peer agent (second opinion) with related article URL
     const peerAgentId = "agent_peer";
     const peerAgent = generateAgentIdentity(
       peerAgentId,
       "Peer Reviewer",
       "Independent Validator"
     );
+    peerAgent.sourceUrl = peerAgentUrl;
 
     const primaryExecutor = await initializeAgent(userAccountId, url);
-    const peerExecutor = await initializeAgent(userAccountId, url);
+    const peerExecutor = await initializeAgent(userAccountId, peerAgentUrl);
 
     const messages: A2AMessage[] = [];
 
