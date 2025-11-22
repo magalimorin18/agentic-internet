@@ -7,14 +7,12 @@ import type { AgentCard } from "@/lib/a2a-agent-card";
 type PeerDiscussionModalProps = {
   claim: { id: string; claim: string; score?: number };
   url?: string;
-  relatedArticleUrl?: string; // Specific related article URL to use for peer agent
   onClose: () => void;
 };
 
 export default function PeerDiscussionModal({
   claim,
   url,
-  relatedArticleUrl,
   onClose,
 }: PeerDiscussionModalProps) {
   const [discussion, setDiscussion] = useState<AgentDiscussion | null>(null);
@@ -47,11 +45,8 @@ export default function PeerDiscussionModal({
       console.error("Error reading related articles:", error);
     }
 
-    // If a specific related article URL is provided, use only that one
-    // Otherwise, use all related articles (API will pick the first one)
-    const articlesToSend = relatedArticleUrl
-      ? [{ url: relatedArticleUrl, summary: "" }]
-      : relatedArticles || [];
+    // Send all related articles for multi-agent discussion
+    const articlesToSend = relatedArticles || [];
 
     try {
       const response = await fetch("/api/agents/discuss", {
@@ -154,7 +149,7 @@ export default function PeerDiscussionModal({
       );
       setIsLoading(false);
     }
-  }, [url, claim, relatedArticleUrl]);
+  }, [url, claim]);
 
   useEffect(() => {
     if (claim && url) {
@@ -168,7 +163,67 @@ export default function PeerDiscussionModal({
     text: string;
     badge: string;
   } {
-    // Primary agent gets blue colors
+    // If we have discussion with agents, use their index for consistent coloring
+    if (discussion?.agents) {
+      const agentIndex = discussion.agents.findIndex((a) => a.id === agentId);
+      if (agentIndex !== -1) {
+        // Primary agent (index 0) always gets blue
+        if (agentIndex === 0) {
+          return {
+            bg: "bg-blue-50",
+            border: "border-blue-400",
+            text: "text-blue-800",
+            badge: "bg-blue-200 text-blue-900",
+          };
+        }
+
+        // Color palette for peer agents (starting from index 1)
+        const peerColors = [
+          {
+            bg: "bg-purple-50",
+            border: "border-purple-400",
+            text: "text-purple-800",
+            badge: "bg-purple-200 text-purple-900",
+          },
+          {
+            bg: "bg-green-50",
+            border: "border-green-400",
+            text: "text-green-800",
+            badge: "bg-green-200 text-green-900",
+          },
+          {
+            bg: "bg-orange-50",
+            border: "border-orange-400",
+            text: "text-orange-800",
+            badge: "bg-orange-200 text-orange-900",
+          },
+          {
+            bg: "bg-pink-50",
+            border: "border-pink-400",
+            text: "text-pink-800",
+            badge: "bg-pink-200 text-pink-900",
+          },
+          {
+            bg: "bg-teal-50",
+            border: "border-teal-400",
+            text: "text-teal-800",
+            badge: "bg-teal-200 text-teal-900",
+          },
+          {
+            bg: "bg-indigo-50",
+            border: "border-indigo-400",
+            text: "text-indigo-800",
+            badge: "bg-indigo-200 text-indigo-900",
+          },
+        ];
+
+        // Use agent index - 1 for peer agents (since index 0 is primary)
+        const peerIndex = agentIndex - 1;
+        return peerColors[peerIndex % peerColors.length] || peerColors[0];
+      }
+    }
+
+    // Fallback: Primary agent gets blue, others get purple
     if (agentId === "agent_primary" || agentId.includes("primary")) {
       return {
         bg: "bg-blue-50",
@@ -177,7 +232,8 @@ export default function PeerDiscussionModal({
         badge: "bg-blue-200 text-blue-900",
       };
     }
-    // Peer agent gets purple colors
+
+    // Default purple for peer agents
     return {
       bg: "bg-purple-50",
       border: "border-purple-400",
@@ -302,29 +358,152 @@ export default function PeerDiscussionModal({
 
             <div className="mb-4 p-3 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-600">
-                <strong>Claim:</strong> {claim.claim}
+                <strong>Debate:</strong> {claim.claim}
               </p>
             </div>
 
-            {/* Messages */}
-            <div className="space-y-3 mb-4">
-              {discussion.messages.map((message: A2AMessage) => {
-                const colors = getAgentColor(message.from);
+            {/* Parallel Discussions */}
+            {(() => {
+              // Get primary agent ID
+              const primaryAgent = discussion.agents.find((a) =>
+                a.id.includes("primary")
+              );
+              const primaryAgentId =
+                primaryAgent?.id || discussion.agents[0]?.id;
 
-                return (
-                  <div
-                    key={message.messageId}
-                    className={`p-3 rounded-lg border-l-4 ${colors.border} ${colors.bg}`}
-                  >
-                    <p
-                      className={`text-sm ${colors.text} leading-relaxed whitespace-pre-wrap`}
-                    >
-                      {message.content}
-                    </p>
-                  </div>
+              // Get all peer agents (non-primary)
+              const peerAgents = discussion.agents.filter(
+                (a) => !a.id.includes("primary")
+              );
+
+              // Group messages by conversation thread (primary <-> each peer)
+              const conversationThreads = peerAgents.map((peerAgent) => {
+                const threadMessages = discussion.messages.filter(
+                  (msg) =>
+                    (msg.from === primaryAgentId && msg.to === peerAgent.id) ||
+                    (msg.from === peerAgent.id && msg.to === primaryAgentId) ||
+                    (msg.from === peerAgent.id && msg.to === "all")
                 );
-              })}
-            </div>
+
+                // Sort by timestamp
+                return {
+                  peerAgent,
+                  messages: threadMessages.sort(
+                    (a, b) => a.timestamp - b.timestamp
+                  ),
+                };
+              });
+
+              // Also include messages to "all" or general messages from primary
+              const generalMessages = discussion.messages.filter(
+                (msg) =>
+                  !conversationThreads.some((thread) =>
+                    thread.messages.some((m) => m.messageId === msg.messageId)
+                  )
+              );
+
+              return (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                    Parallel Discussions
+                  </h4>
+
+                  {/* Display threads in a grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {conversationThreads.map((thread) => {
+                      const peerColors = getAgentColor(thread.peerAgent.id);
+                      const primaryColors = getAgentColor(primaryAgentId);
+
+                      return (
+                        <div
+                          key={thread.peerAgent.id}
+                          className="border border-gray-200 rounded-lg p-3 bg-gray-50"
+                        >
+                          <div
+                            className={`mb-2 p-2 rounded ${peerColors.bg} border ${peerColors.border}`}
+                          >
+                            <p
+                              className={`text-xs font-semibold ${peerColors.text}`}
+                            >
+                              {thread.peerAgent.name}
+                            </p>
+                          </div>
+                          <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {thread.messages.length > 0 ? (
+                              thread.messages.map((message) => {
+                                const isFromPrimary =
+                                  message.from === primaryAgentId;
+                                const colors = isFromPrimary
+                                  ? primaryColors
+                                  : peerColors;
+                                const agent = discussion.agents.find(
+                                  (a) => a.id === message.from
+                                );
+                                const agentName = agent?.name || message.from;
+
+                                return (
+                                  <div
+                                    key={message.messageId}
+                                    className={`p-2 rounded-lg border-l-4 ${colors.border} ${colors.bg}`}
+                                  >
+                                    <p
+                                      className={`text-xs ${colors.text} leading-relaxed whitespace-pre-wrap`}
+                                    >
+                                      <span className="font-semibold">
+                                        {agentName}:
+                                      </span>{" "}
+                                      {message.content}
+                                    </p>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-xs text-gray-500 italic">
+                                No messages yet...
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* General messages (to "all" or synthesis messages) */}
+                  {generalMessages.length > 0 && (
+                    <div className="mt-4">
+                      <h5 className="text-xs font-semibold text-gray-600 mb-2">
+                        General Discussion
+                      </h5>
+                      <div className="space-y-2">
+                        {generalMessages.map((message) => {
+                          const colors = getAgentColor(message.from);
+                          const agent = discussion.agents.find(
+                            (a) => a.id === message.from
+                          );
+                          const agentName = agent?.name || message.from;
+
+                          return (
+                            <div
+                              key={message.messageId}
+                              className={`p-3 rounded-lg border-l-4 ${colors.border} ${colors.bg}`}
+                            >
+                              <p
+                                className={`text-sm ${colors.text} leading-relaxed whitespace-pre-wrap`}
+                              >
+                                <span className="font-semibold">
+                                  {agentName}:
+                                </span>{" "}
+                                {message.content}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Final Agreement */}
             {discussion.finalAgreement && (

@@ -9,11 +9,6 @@ type Claim = {
   score?: number;
 };
 
-type RelatedArticle = {
-  url: string;
-  summary: string;
-};
-
 type ClaimsTableProps = {
   claims?: Claim[];
   url?: string;
@@ -24,35 +19,16 @@ export default function ClaimsTable({
   url,
 }: ClaimsTableProps = {}) {
   const [selectedClaim, setSelectedClaim] = useState<Claim | null>(null);
-  const [selectedRelatedArticleUrl, setSelectedRelatedArticleUrl] = useState<
-    string | null
-  >(null);
 
   // Use props if provided, otherwise show empty state (prompting user to click GET CLAIMS)
   const claims = initialClaims !== undefined ? initialClaims : [];
 
-  // Get related articles from sessionStorage
-  let relatedArticles: RelatedArticle[] = [];
-  if (typeof window !== "undefined") {
-    try {
-      const stored = sessionStorage.getItem("agentInitResult");
-      if (stored) {
-        const initResult = JSON.parse(stored);
-        relatedArticles = initResult.relatedArticles || [];
-      }
-    } catch (error) {
-      console.error("Error reading related articles:", error);
-    }
-  }
-
-  const handleAskReview = (claim: Claim, relatedArticleUrl: string) => {
+  const handleAskAgents = (claim: Claim) => {
     setSelectedClaim(claim);
-    setSelectedRelatedArticleUrl(relatedArticleUrl);
   };
 
   const handleCloseModal = () => {
     setSelectedClaim(null);
-    setSelectedRelatedArticleUrl(null);
   };
 
   return (
@@ -103,53 +79,27 @@ export default function ClaimsTable({
                     {c.claim}
                   </p>
 
-                  {/* Action Buttons */}
-                  {relatedArticles.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {relatedArticles.map((article, index) => {
-                        let displayUrl = article.url;
-                        try {
-                          displayUrl = new URL(article.url).hostname;
-                        } catch {
-                          displayUrl =
-                            article.url.length > 30
-                              ? article.url.substring(0, 30) + "..."
-                              : article.url;
-                        }
-                        return (
-                          <button
-                            key={index}
-                            onClick={() => handleAskReview(c, article.url)}
-                            className="px-4 py-2 bg-purple-300 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors flex items-center gap-2"
-                            title={`Ask review on ${article.url}`}
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                              />
-                            </svg>
-                            <span>Ask agent {displayUrl}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleAskReview(c, "")}
-                      className="px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-sm font-medium cursor-not-allowed"
-                      disabled
+                  {/* Action Button */}
+                  <button
+                    onClick={() => handleAskAgents(c)}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2"
+                    title="Start discussion between all agents"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
                     >
-                      No related articles available
-                    </button>
-                  )}
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                      />
+                    </svg>
+                    <span>ASK AGENTS</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -161,7 +111,6 @@ export default function ClaimsTable({
         <PeerDiscussionModal
           claim={selectedClaim}
           url={url}
-          relatedArticleUrl={selectedRelatedArticleUrl || undefined}
           onClose={handleCloseModal}
         />
       )}
