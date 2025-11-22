@@ -220,11 +220,26 @@ export default function PeerDiscussionModal({
                   </span>
                 </div>
                 {discussion.finalAgreement.settlementHash && (
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-600 mb-1">Hedera:</p>
-                    <code className="text-xs bg-white p-1.5 rounded border block break-all">
+                  <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
+                    <p className="text-xs font-semibold text-gray-700 mb-1">
+                      Hedera Settlement Hash:
+                    </p>
+                    <p className="text-xs text-gray-600 mb-2">
+                      This hash represents the on-chain record of the agreement.
+                      Click to verify on Hedera Explorer.
+                    </p>
+                    <a
+                      href={`https://hashscan.io/testnet/transaction/${discussion.finalAgreement.settlementHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline break-all block"
+                    >
                       {discussion.finalAgreement.settlementHash}
-                    </code>
+                    </a>
+                    <p className="text-xs text-gray-500 mt-1 italic">
+                      Note: Currently a placeholder. In production, this will be
+                      an actual Hedera transaction hash.
+                    </p>
                   </div>
                 )}
               </div>
