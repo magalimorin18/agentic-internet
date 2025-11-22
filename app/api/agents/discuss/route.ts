@@ -217,37 +217,37 @@ export async function POST(req: NextRequest) {
 
           const messages: A2AMessage[] = [];
 
-          // Step 1: Primary agent queries all peer agents about the claim
+          // Step 1: Conduct separate discussions between primary and each peer agent
           sendEvent("status", {
-            message: `Querying ${peerAgents.length} peer agent(s) about the claim...`,
+            message: `Starting separate discussions with ${peerAgents.length} peer agent(s)...`,
           });
 
-          const queryMessage = `Can you review this claim: "${claim}"?`;
-
-          // Send query to all peer agents
-          for (const peerAgent of peerAgents) {
-            const queryMsg = createA2AMessage(
-              primaryAgentId,
-              peerAgent.id,
-              "query",
-              queryMessage,
-              claimId
-            );
-            messages.push(queryMsg);
-            sendEvent("message", queryMsg);
-          }
-
-          // Start review tasks for all peer agents in parallel
-          interface PeerReviewResult {
+          interface DiscussionResult {
             agentId: string;
-            review: string;
-            confidence?: number;
+            confidence: number;
+            messages: A2AMessage[];
           }
 
-          const reviewResults: PeerReviewResult[] = [];
-
-          await Promise.all(
+          // Run separate discussions in parallel
+          const discussionResults: DiscussionResult[] = await Promise.all(
             peerAgentEndpoints.map(async ({ agent, url: endpointUrl }) => {
+              const discussionMessages: A2AMessage[] = [];
+              let finalConfidence = 0.5; // Default confidence
+
+              // Initial query from primary
+              const queryMessage = `Can you review this claim: "${claim}"?`;
+              const queryMsg = createA2AMessage(
+                primaryAgentId,
+                agent.id,
+                "query",
+                queryMessage,
+                claimId
+              );
+              discussionMessages.push(queryMsg);
+              messages.push(queryMsg);
+              sendEvent("message", queryMsg);
+
+              // Peer agent's initial review
               const reviewTaskParams: StartTaskParams = {
                 taskType: "claim_review",
                 input: {
@@ -267,11 +267,11 @@ export async function POST(req: NextRequest) {
               );
 
               if (reviewTaskResponse.error) {
-                reviewResults.push({
+                return {
                   agentId: agent.id,
-                  review: "Unable to provide review.",
-                });
-                return;
+                  confidence: 0.5,
+                  messages: discussionMessages,
+                };
               }
 
               interface TaskStartResult {
@@ -279,130 +279,97 @@ export async function POST(req: NextRequest) {
                 status: string;
               }
 
-              const taskId = (reviewTaskResponse.result as TaskStartResult)
-                ?.taskId;
-              if (!taskId) {
-                reviewResults.push({
+              const reviewTaskId = (
+                reviewTaskResponse.result as TaskStartResult
+              )?.taskId;
+              if (!reviewTaskId) {
+                return {
                   agentId: agent.id,
-                  review: "Unable to provide review.",
-                });
-                return;
+                  confidence: 0.5,
+                  messages: discussionMessages,
+                };
               }
 
-              const review = await waitForTaskCompletion(endpointUrl, taskId);
-              const confidence = review ? extractConfidence(review) : undefined;
-
-              reviewResults.push({
-                agentId: agent.id,
-                review: review || "Unable to provide review.",
-                confidence,
-              });
-
-              // Send response message
-              const responseMsg = createA2AMessage(
-                agent.id,
-                primaryAgentId,
-                "response",
-                review || "Unable to provide review.",
-                claimId,
-                {
-                  confidence,
-                }
+              const initialReview = await waitForTaskCompletion(
+                endpointUrl,
+                reviewTaskId
               );
-              messages.push(responseMsg);
-              sendEvent("message", responseMsg);
-            })
-          );
+              let currentConfidence = initialReview
+                ? extractConfidence(initialReview) || 0.5
+                : 0.5;
 
-          // Step 2: Primary agent responds to reviews and asks follow-up questions
-          sendEvent("status", {
-            message:
-              "Primary agent is analyzing peer reviews and preparing follow-up questions...",
-          });
+              if (initialReview) {
+                const reviewMsg = createA2AMessage(
+                  agent.id,
+                  primaryAgentId,
+                  "response",
+                  initialReview,
+                  claimId,
+                  {
+                    confidence: currentConfidence,
+                  }
+                );
+                discussionMessages.push(reviewMsg);
+                messages.push(reviewMsg);
+                sendEvent("message", reviewMsg);
+              }
 
-          const allReviews = reviewResults.map((r) => r.review).join("\n\n");
-          const confidences = reviewResults
-            .map((r) => r.confidence)
-            .filter((c): c is number => c !== undefined);
+              // Primary agent asks follow-up question based on this specific review
+              const followUpPrompt = `Claim: "${claim}"
 
-          // Primary agent prepares follow-up questions based on reviews
-          const followUpPrompt = `Claim: "${claim}"
+Peer Review:
+${initialReview || "No review provided"}
 
-Peer Reviews:
-${allReviews}
+Prepare 1-2 VERY BRIEF questions (1 sentence each max). Focus on key points.`;
 
-Prepare 1-2 VERY BRIEF questions (1 sentence each max). Focus on key disagreements only.`;
+              const followUpTaskParams: StartTaskParams = {
+                taskType: "claim_validation",
+                input: {
+                  modality: "text",
+                  content: followUpPrompt,
+                },
+                metadata: {
+                  sourceUrl: url,
+                  claimId,
+                },
+              };
 
-          const followUpTaskParams: StartTaskParams = {
-            taskType: "claim_validation",
-            input: {
-              modality: "text",
-              content: followUpPrompt,
-            },
-            metadata: {
-              sourceUrl: url,
-              claimId,
-            },
-          };
-
-          const followUpTaskResponse = await sendA2ARequest(
-            primaryAgentUrl,
-            "StartTask",
-            followUpTaskParams
-          );
-
-          let followUpQuestions = "";
-          if (!followUpTaskResponse.error) {
-            interface TaskStartResult {
-              taskId: string;
-              status: string;
-            }
-            const followUpTaskId = (
-              followUpTaskResponse.result as TaskStartResult
-            )?.taskId;
-            if (followUpTaskId) {
-              const result = await waitForTaskCompletion(
+              const followUpTaskResponse = await sendA2ARequest(
                 primaryAgentUrl,
-                followUpTaskId
+                "StartTask",
+                followUpTaskParams
               );
-              if (result) {
-                followUpQuestions = result;
+
+              let followUpQuestions = "";
+              if (!followUpTaskResponse.error) {
+                const followUpTaskId = (
+                  followUpTaskResponse.result as TaskStartResult
+                )?.taskId;
+                if (followUpTaskId) {
+                  const result = await waitForTaskCompletion(
+                    primaryAgentUrl,
+                    followUpTaskId
+                  );
+                  if (result) {
+                    followUpQuestions = result;
+                  }
+                }
               }
-            }
-          }
 
-          // Send follow-up questions to all peer agents
-          if (followUpQuestions) {
-            sendEvent("status", {
-              message:
-                "Primary agent is raising follow-up questions for debate...",
-            });
+              // Send follow-up question to this peer
+              if (followUpQuestions) {
+                const followUpMsg = createA2AMessage(
+                  primaryAgentId,
+                  agent.id,
+                  "proposal",
+                  followUpQuestions,
+                  claimId
+                );
+                discussionMessages.push(followUpMsg);
+                messages.push(followUpMsg);
+                sendEvent("message", followUpMsg);
 
-            for (const peerAgent of peerAgents) {
-              const followUpMsg = createA2AMessage(
-                primaryAgentId,
-                peerAgent.id,
-                "proposal",
-                followUpQuestions,
-                claimId
-              );
-              messages.push(followUpMsg);
-              sendEvent("message", followUpMsg);
-            }
-
-            // Step 3: Peer agents respond to follow-up questions
-            sendEvent("status", {
-              message: "Peer agents are responding to follow-up questions...",
-            });
-
-            const debateResults: Array<{
-              agentId: string;
-              response: string;
-              confidence?: number;
-            }> = [];
-
-            await Promise.all(
-              peerAgentEndpoints.map(async ({ agent, url: endpointUrl }) => {
+                // Peer responds to follow-up
                 const debatePrompt = `Claim: "${claim}"
 
 Primary agent's questions:
@@ -428,206 +395,137 @@ Respond in 1 sentence max. Be direct and concise.`;
                   debateTaskParams
                 );
 
-                if (debateTaskResponse.error) {
-                  return;
-                }
-
-                interface TaskStartResult {
-                  taskId: string;
-                  status: string;
-                }
-                const taskId = (debateTaskResponse.result as TaskStartResult)
-                  ?.taskId;
-                if (!taskId) {
-                  return;
-                }
-
-                const response = await waitForTaskCompletion(
-                  endpointUrl,
-                  taskId
-                );
-                const confidence = response
-                  ? extractConfidence(response)
-                  : undefined;
-
-                if (response) {
-                  debateResults.push({
-                    agentId: agent.id,
-                    response,
-                    confidence,
-                  });
-
-                  // Update confidence if provided
-                  const existingResult = reviewResults.find(
-                    (r) => r.agentId === agent.id
-                  );
-                  if (existingResult && confidence !== undefined) {
-                    existingResult.confidence = confidence;
-                  }
-
-                  // Send debate response message
-                  const debateMsg = createA2AMessage(
-                    agent.id,
-                    primaryAgentId,
-                    "response",
-                    response,
-                    claimId,
-                    {
-                      confidence,
-                    }
-                  );
-                  messages.push(debateMsg);
-                  sendEvent("message", debateMsg);
-                }
-              })
-            );
-
-            // Step 4: Optional - Peer agents can also respond to each other (parallelized)
-            if (debateResults.length > 1) {
-              sendEvent("status", {
-                message: "Agents are considering each other's viewpoints...",
-              });
-
-              // Process all peer agents in parallel instead of sequentially
-              await Promise.all(
-                peerAgentEndpoints.map(async ({ agent, url: endpointUrl }) => {
-                  const otherResponses = debateResults
-                    .filter((r) => r.agentId !== agent.id)
-                    .map((r) => {
-                      const peerName =
-                        peerAgents.find((a) => a.id === r.agentId)?.name ||
-                        "Peer";
-                      return `${peerName}: ${r.response}`;
-                    })
-                    .join("\n\n");
-
-                  if (otherResponses) {
-                    const crossDebatePrompt = `Claim: "${claim}"
-
-Other agents: ${otherResponses}
-
-Final thought (1 sentence max).`;
-
-                    const crossDebateTaskParams: StartTaskParams = {
-                      taskType: "claim_review",
-                      input: {
-                        modality: "text",
-                        content: crossDebatePrompt,
-                      },
-                      metadata: {
-                        sourceUrl: agent.sourceUrl || url,
-                        claimId,
-                      },
-                    };
-
-                    const crossDebateResponse = await sendA2ARequest(
+                if (!debateTaskResponse.error) {
+                  const debateTaskId = (
+                    debateTaskResponse.result as TaskStartResult
+                  )?.taskId;
+                  if (debateTaskId) {
+                    const debateResponse = await waitForTaskCompletion(
                       endpointUrl,
-                      "StartTask",
-                      crossDebateTaskParams
+                      debateTaskId
                     );
+                    const debateConfidence = debateResponse
+                      ? extractConfidence(debateResponse) || currentConfidence
+                      : currentConfidence;
+                    currentConfidence = debateConfidence;
 
-                    if (!crossDebateResponse.error) {
-                      interface TaskStartResult {
-                        taskId: string;
-                        status: string;
-                      }
-                      const taskId = (
-                        crossDebateResponse.result as TaskStartResult
-                      )?.taskId;
-                      if (taskId) {
-                        const result = await waitForTaskCompletion(
-                          endpointUrl,
-                          taskId
-                        );
-                        if (result) {
-                          const finalThoughtMsg = createA2AMessage(
-                            agent.id,
-                            "all",
-                            "proposal",
-                            result,
-                            claimId
-                          );
-                          messages.push(finalThoughtMsg);
-                          sendEvent("message", finalThoughtMsg);
+                    if (debateResponse) {
+                      const debateMsg = createA2AMessage(
+                        agent.id,
+                        primaryAgentId,
+                        "response",
+                        debateResponse,
+                        claimId,
+                        {
+                          confidence: debateConfidence,
                         }
-                      }
+                      );
+                      discussionMessages.push(debateMsg);
+                      messages.push(debateMsg);
+                      sendEvent("message", debateMsg);
                     }
                   }
-                })
-              );
-            }
-          }
+                }
+              }
 
-          // Step 5: Final synthesis after debate
+              // Final conclusion for this discussion
+              const conclusionPrompt = `Claim: "${claim}"
+
+Discussion summary:
+- Initial review: ${initialReview || "N/A"}
+${
+  followUpQuestions
+    ? `- Follow-up: ${followUpQuestions}\n- Response: ${
+        discussionMessages.find(
+          (m) =>
+            m.from === agent.id &&
+            m.type === "response" &&
+            m.content !== initialReview
+        )?.content || "N/A"
+      }`
+    : ""
+}
+
+Provide final assessment (1 sentence max) with confidence (0-1).`;
+
+              const conclusionTaskParams: StartTaskParams = {
+                taskType: "claim_validation",
+                input: {
+                  modality: "text",
+                  content: conclusionPrompt,
+                },
+                metadata: {
+                  sourceUrl: url,
+                  claimId,
+                },
+              };
+
+              const conclusionTaskResponse = await sendA2ARequest(
+                primaryAgentUrl,
+                "StartTask",
+                conclusionTaskParams
+              );
+
+              if (!conclusionTaskResponse.error) {
+                const conclusionTaskId = (
+                  conclusionTaskResponse.result as TaskStartResult
+                )?.taskId;
+                if (conclusionTaskId) {
+                  const conclusion = await waitForTaskCompletion(
+                    primaryAgentUrl,
+                    conclusionTaskId
+                  );
+                  const conclusionConfidence = conclusion
+                    ? extractConfidence(conclusion) || currentConfidence
+                    : currentConfidence;
+                  finalConfidence = conclusionConfidence;
+
+                  if (conclusion) {
+                    const conclusionMsg = createA2AMessage(
+                      primaryAgentId,
+                      agent.id,
+                      "agreement",
+                      conclusion,
+                      claimId,
+                      {
+                        confidence: conclusionConfidence,
+                      }
+                    );
+                    discussionMessages.push(conclusionMsg);
+                    messages.push(conclusionMsg);
+                    sendEvent("message", conclusionMsg);
+                  }
+                }
+              }
+
+              return {
+                agentId: agent.id,
+                confidence: finalConfidence,
+                messages: discussionMessages,
+              };
+            })
+          );
+
+          // Step 2: Calculate final confidence as mean of all individual discussion confidences
           sendEvent("status", {
-            message:
-              "Synthesizing all discussions and reaching final agreement...",
+            message: "Calculating final confidence from all discussions...",
           });
 
-          // Collect all reviews and debate responses
-          const allDebateResponses = messages
-            .filter((m) => m.type === "response" && m.from !== primaryAgentId)
-            .map((m) => m.content)
-            .join("\n\n");
-
-          // Calculate average confidence from all responses
-          const allConfidences = messages
-            .filter((m) => m.metadata?.confidence !== undefined)
-            .map((m) => m.metadata!.confidence as number);
-
+          // Calculate mean confidence from all separate discussions
+          const confidences = discussionResults.map((r) => r.confidence);
           const averageConfidence =
-            allConfidences.length > 0
-              ? allConfidences.reduce((sum, c) => sum + c, 0) /
-                allConfidences.length
-              : confidences.length > 0
+            confidences.length > 0
               ? confidences.reduce((sum, c) => sum + c, 0) / confidences.length
               : 0.5;
 
-          const synthesisPrompt = `Claim: "${claim}"
-
-Reviews: ${allReviews}
-${followUpQuestions ? `Debate: ${allDebateResponses}\n` : ""}
-
-Synthesis (2 sentences max):
-- Agreement: "agreed", "disagreed", or "partial"
-- Confidence (0-1)`;
-
-          const synthesisTaskParams: StartTaskParams = {
-            taskType: "claim_validation",
-            input: {
-              modality: "text",
-              content: synthesisPrompt,
-            },
-            metadata: {
-              sourceUrl: url,
-              claimId,
-            },
-          };
-
-          const synthesisTaskResponse = await sendA2ARequest(
-            primaryAgentUrl,
-            "StartTask",
-            synthesisTaskParams
-          );
-
+          // Determine overall agreement status based on average confidence
           let agreementText = "partial";
-          if (!synthesisTaskResponse.error) {
-            interface TaskStartResult {
-              taskId: string;
-              status: string;
-            }
-            const synthesisTaskId = (
-              synthesisTaskResponse.result as TaskStartResult
-            )?.taskId;
-            if (synthesisTaskId) {
-              const result = await waitForTaskCompletion(
-                primaryAgentUrl,
-                synthesisTaskId
-              );
-              if (result) {
-                agreementText = result;
-              }
-            }
+          if (averageConfidence >= 0.7) {
+            agreementText = "agreed";
+          } else if (averageConfidence <= 0.3) {
+            agreementText = "disagreed";
+          } else {
+            agreementText = "partial";
           }
 
           const isAgreed = agreementText.toLowerCase().includes("agreed");
@@ -637,12 +535,15 @@ Synthesis (2 sentences max):
           if (isAgreed) finalStatus = "agreed";
           else if (isDisagreed) finalStatus = "disagreed";
 
-          // Send final synthesis message
+          // Send final synthesis message with mean confidence
+          const synthesisText = `Final assessment: ${agreementText}. Mean confidence from ${
+            discussionResults.length
+          } discussion(s): ${(averageConfidence * 100).toFixed(0)}%`;
           const synthesisMsg = createA2AMessage(
             primaryAgentId,
             "all",
             isAgreed ? "agreement" : isDisagreed ? "disagreement" : "proposal",
-            agreementText,
+            synthesisText,
             claimId,
             {
               agreementLevel: isAgreed
@@ -650,6 +551,7 @@ Synthesis (2 sentences max):
                 : isDisagreed
                 ? "none"
                 : "moderate",
+              confidence: averageConfidence,
             }
           );
           messages.push(synthesisMsg);
@@ -742,7 +644,7 @@ Synthesis (2 sentences max):
           messages.push(settlementMsg);
           sendEvent("message", settlementMsg);
 
-          // Calculate final confidence (average of all peer confidences)
+          // Final confidence is the mean of all individual discussion confidences
           const finalConfidence = averageConfidence;
 
           // Send final agreement
