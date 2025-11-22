@@ -84,19 +84,28 @@ export default function PeerDiscussionModal({
     }
   }, [claim, url, fetchDiscussion]);
 
-  function getMessageTypeColor(type: A2AMessage["type"]): string {
-    switch (type) {
-      case "agreement":
-        return "bg-green-100 text-green-800";
-      case "disagreement":
-        return "bg-red-100 text-red-800";
-      case "settlement":
-        return "bg-blue-100 text-blue-800";
-      case "query":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-50 text-gray-700";
+  function getAgentColor(agentId: string): {
+    bg: string;
+    border: string;
+    text: string;
+    badge: string;
+  } {
+    // Primary agent gets blue colors
+    if (agentId === "agent_primary" || agentId.includes("primary")) {
+      return {
+        bg: "bg-blue-50",
+        border: "border-blue-400",
+        text: "text-blue-800",
+        badge: "bg-blue-200 text-blue-900",
+      };
     }
+    // Peer agent gets purple colors
+    return {
+      bg: "bg-purple-50",
+      border: "border-purple-400",
+      text: "text-purple-800",
+      badge: "bg-purple-200 text-purple-900",
+    };
   }
 
   return (
@@ -110,12 +119,6 @@ export default function PeerDiscussionModal({
           >
             ×
           </button>
-        </div>
-
-        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-600">
-            <strong>Claim:</strong> {claim.claim}
-          </p>
         </div>
 
         {isLoading && (
@@ -143,15 +146,18 @@ export default function PeerDiscussionModal({
         {discussion && (
           <>
             {/* Agent Identities */}
-            <div className="mb-3 p-3 bg-blue-50 rounded-lg">
-              <div className="space-y-2">
-                {discussion.agents.map((agent) => (
-                  <div key={agent.id} className="text-xs">
-                    <span className="font-semibold text-gray-700">
-                      {agent.name}
-                    </span>
+            <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              {discussion.agents.map((agent) => {
+                const colors = getAgentColor(agent.id);
+                return (
+                  <div key={agent.id} className={`p-2 rounded-lg ${colors.bg}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-semibold text-sm ${colors.text}`}>
+                        {agent.name}
+                      </span>
+                    </div>
                     {agent.sourceUrl && (
-                      <div className="mt-1">
+                      <div className="mt-1 text-xs">
                         <span className="text-gray-600">Source: </span>
                         <a
                           href={agent.sourceUrl}
@@ -164,34 +170,29 @@ export default function PeerDiscussionModal({
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </div>
+
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                <strong>Claim:</strong> {claim.claim}
+              </p>
             </div>
 
             {/* Messages */}
-            <div className="space-y-2 mb-4">
+            <div className="space-y-3 mb-4">
               {discussion.messages.map((message: A2AMessage) => {
-                const agent = discussion.agents.find(
-                  (a) => a.id === message.from
-                );
+                const colors = getAgentColor(message.from);
+
                 return (
                   <div
                     key={message.messageId}
-                    className="p-2 border-l-2 border-gray-200 pl-3"
+                    className={`p-3 rounded-lg border-l-4 ${colors.border} ${colors.bg}`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-xs text-gray-700">
-                        {agent?.name || message.from}:
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-xs ${getMessageTypeColor(
-                          message.type
-                        )}`}
-                      >
-                        {message.type}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-800 leading-relaxed">
+                    <p
+                      className={`text-sm ${colors.text} leading-relaxed whitespace-pre-wrap`}
+                    >
                       {message.content}
                     </p>
                   </div>
