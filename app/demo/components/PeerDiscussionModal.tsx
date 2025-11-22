@@ -219,15 +219,12 @@ export default function PeerDiscussionModal({
                     {discussion.finalAgreement.status.toUpperCase()}
                   </span>
                 </div>
-                {discussion.finalAgreement.settlementHash && (
+                {discussion.finalAgreement.settlementHash ? (
                   <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
                     <p className="text-xs font-semibold text-gray-700 mb-1">
                       Hedera Settlement Hash:
                     </p>
-                    <p className="text-xs text-gray-600 mb-2">
-                      This hash represents the on-chain record of the agreement.
-                      Click to verify on Hedera Explorer.
-                    </p>
+
                     <a
                       href={`https://hashscan.io/testnet/transaction/${discussion.finalAgreement.settlementHash}`}
                       target="_blank"
@@ -236,12 +233,28 @@ export default function PeerDiscussionModal({
                     >
                       {discussion.finalAgreement.settlementHash}
                     </a>
-                    <p className="text-xs text-gray-500 mt-1 italic">
-                      Note: Currently a placeholder. In production, this will be
-                      an actual Hedera transaction hash.
+                    <p className="text-xs text-green-600 mt-1 font-semibold">
+                      ✓ Verified on Hedera Network
                     </p>
                   </div>
-                )}
+                ) : discussion.finalAgreement.settlementError ? (
+                  <div className="mt-3 p-2 bg-red-50 rounded border border-red-200">
+                    <p className="text-xs font-semibold text-red-700 mb-1">
+                      Settlement Generation Failed:
+                    </p>
+                    <p className="text-xs text-red-600 mb-2">
+                      Unable to generate Hedera settlement. The settlement could
+                      not be recorded on-chain.
+                    </p>
+                    <p className="text-xs text-red-500 mt-1">
+                      Error: {discussion.finalAgreement.settlementError}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2 italic">
+                      Please check your Hedera credentials configuration. See
+                      the setup guide for more information.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             )}
 

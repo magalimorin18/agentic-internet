@@ -1,6 +1,7 @@
 import { initializeAgent } from "@/server/initialize-agent";
 import { NextRequest } from "next/server";
 import type { AgentDiscussion, A2AMessage, AgentIdentity } from "@/types/a2a";
+import { createHederaSettlement } from "@/lib/hedera-settlement";
 
 export const runtime = "nodejs";
 
@@ -152,12 +153,10 @@ Respond with ONE WORD: "agreed", "disagreed", or "partial". Then ONE SENTENCE ex
     const isAgreed = agreementText.toLowerCase().includes("agreed");
     const isDisagreed = agreementText.toLowerCase().includes("disagreed");
 
-    // Determine final agreement status
     let finalStatus: "agreed" | "disagreed" | "partial" = "partial";
     if (isAgreed) finalStatus = "agreed";
     else if (isDisagreed) finalStatus = "disagreed";
 
-    // Add agreement/disagreement message
     messages.push(
       createA2AMessage(
         primaryAgentId,
@@ -184,19 +183,50 @@ This will be recorded on Hedera. Be concise.`;
       input: settlementPrompt,
     });
 
+    const settlementStatement =
+      settlementResponse.output ?? "Settlement proposal generated.";
+
+    const settlementResult = await createHederaSettlement({
+      claimId: claimId || "unknown",
+      agents: [primaryAgentId, peerAgentId],
+      agreement: finalStatus,
+      timestamp: Date.now(),
+      settlementStatement,
+    });
+
+    if (settlementResult.success) {
+      console.log(
+        `Hedera settlement created successfully: ${settlementResult.transactionHash}`,
+        settlementResult
+      );
+    } else {
+      console.error(`Hedera settlement failed: ${settlementResult.error}`);
+    }
+
     messages.push(
       createA2AMessage(
         peerAgentId,
         primaryAgentId,
         "settlement",
-        settlementResponse.output ?? "Settlement proposal generated.",
+        settlementStatement,
         claimId,
         {
-          // In production, this would contain actual Hedera transaction hash
-          settlementHash: `0x${Math.random().toString(16).substring(2, 66)}`,
+          ...(settlementResult.success && {
+            settlementHash:
+              settlementResult.transactionHash ||
+              settlementResult.transactionId,
+            topicId: settlementResult.topicId,
+            transactionId: settlementResult.transactionId,
+          }),
+          // Include error if settlement failed
+          ...(!settlementResult.success && {
+            settlementError: settlementResult.error,
+          }),
         }
       )
     );
+
+    const settlementMessage = messages[messages.length - 1];
 
     // Build discussion object
     const discussion: AgentDiscussion = {
@@ -207,7 +237,8 @@ This will be recorded on Hedera. Be concise.`;
       finalAgreement: {
         status: finalStatus,
         confidence: 0.75,
-        settlementHash: messages[messages.length - 1].metadata?.settlementHash,
+        settlementHash: settlementMessage.metadata?.settlementHash,
+        settlementError: settlementMessage.metadata?.settlementError,
       },
     };
 

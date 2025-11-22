@@ -24,6 +24,9 @@ export interface A2AMessage {
     evidence?: string[];
     settlementHash?: string; // Hedera transaction hash
     agreementLevel?: "strong" | "moderate" | "weak" | "none";
+    topicId?: string;
+    transactionId?: string;
+    settlementError?: string;
   };
 }
 
@@ -45,5 +48,6 @@ export interface AgentDiscussion {
     status: "agreed" | "disagreed" | "partial";
     confidence: number;
     settlementHash?: string;
+    settlementError?: string;
   };
 }
