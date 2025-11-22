@@ -78,11 +78,11 @@ function createA2AMessage(
 async function waitForTaskCompletion(
   agentUrl: string,
   taskId: string,
-  maxAttempts: number = 10
+  maxAttempts: number = 15
 ): Promise<string | null> {
   let attempts = 0;
   while (attempts < maxAttempts) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     const statusResponse = await sendA2ARequest(agentUrl, "GetTaskStatus", {
       taskId,
     });
@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
 Peer Reviews:
 ${allReviews}
 
-Based on these reviews, prepare 1-2 VERY BRIEF follow-up questions or points for debate. Focus on areas where there might be disagreement. Be extremely concise (1 sentence per question max).`;
+Prepare 1-2 VERY BRIEF questions (1 sentence each max). Focus on key disagreements only.`;
 
           const followUpTaskParams: StartTaskParams = {
             taskType: "claim_validation",
@@ -405,16 +405,10 @@ Based on these reviews, prepare 1-2 VERY BRIEF follow-up questions or points for
               peerAgentEndpoints.map(async ({ agent, url: endpointUrl }) => {
                 const debatePrompt = `Claim: "${claim}"
 
-Your initial review was already provided. Now, the primary agent has raised these follow-up questions:
-
+Primary agent's questions:
 ${followUpQuestions}
 
-Please respond VERY BRIEFLY (1 sentence max). You can:
-- Clarify your position
-- Provide key evidence
-- Challenge or support viewpoints
-
-Be extremely concise.`;
+Respond in 1 sentence max. Be direct and concise.`;
 
                 const debateTaskParams: StartTaskParams = {
                   taskType: "claim_review",
@@ -488,79 +482,79 @@ Be extremely concise.`;
               })
             );
 
-            // Step 4: Optional - Peer agents can also respond to each other
+            // Step 4: Optional - Peer agents can also respond to each other (parallelized)
             if (debateResults.length > 1) {
               sendEvent("status", {
                 message: "Agents are considering each other's viewpoints...",
               });
 
-              // Let each peer agent see other peers' responses and provide final thoughts
-              for (let i = 0; i < peerAgentEndpoints.length; i++) {
-                const { agent, url: endpointUrl } = peerAgentEndpoints[i];
-                const otherResponses = debateResults
-                  .filter((r) => r.agentId !== agent.id)
-                  .map((r) => {
-                    const peerName =
-                      peerAgents.find((a) => a.id === r.agentId)?.name ||
-                      "Peer";
-                    return `${peerName}: ${r.response}`;
-                  })
-                  .join("\n\n");
+              // Process all peer agents in parallel instead of sequentially
+              await Promise.all(
+                peerAgentEndpoints.map(async ({ agent, url: endpointUrl }) => {
+                  const otherResponses = debateResults
+                    .filter((r) => r.agentId !== agent.id)
+                    .map((r) => {
+                      const peerName =
+                        peerAgents.find((a) => a.id === r.agentId)?.name ||
+                        "Peer";
+                      return `${peerName}: ${r.response}`;
+                    })
+                    .join("\n\n");
 
-                if (otherResponses) {
-                  const crossDebatePrompt = `Claim: "${claim}"
+                  if (otherResponses) {
+                    const crossDebatePrompt = `Claim: "${claim}"
 
-Other peer agents have responded:
-${otherResponses}
+Other agents: ${otherResponses}
 
-Provide a VERY brief final thought (1 sentence max) considering these viewpoints. You can agree, disagree, or add nuance.`;
+Final thought (1 sentence max).`;
 
-                  const crossDebateTaskParams: StartTaskParams = {
-                    taskType: "claim_review",
-                    input: {
-                      modality: "text",
-                      content: crossDebatePrompt,
-                    },
-                    metadata: {
-                      sourceUrl: agent.sourceUrl || url,
-                      claimId,
-                    },
-                  };
+                    const crossDebateTaskParams: StartTaskParams = {
+                      taskType: "claim_review",
+                      input: {
+                        modality: "text",
+                        content: crossDebatePrompt,
+                      },
+                      metadata: {
+                        sourceUrl: agent.sourceUrl || url,
+                        claimId,
+                      },
+                    };
 
-                  const crossDebateResponse = await sendA2ARequest(
-                    endpointUrl,
-                    "StartTask",
-                    crossDebateTaskParams
-                  );
+                    const crossDebateResponse = await sendA2ARequest(
+                      endpointUrl,
+                      "StartTask",
+                      crossDebateTaskParams
+                    );
 
-                  if (!crossDebateResponse.error) {
-                    interface TaskStartResult {
-                      taskId: string;
-                      status: string;
-                    }
-                    const taskId = (
-                      crossDebateResponse.result as TaskStartResult
-                    )?.taskId;
-                    if (taskId) {
-                      const result = await waitForTaskCompletion(
-                        endpointUrl,
-                        taskId
-                      );
-                      if (result) {
-                        const finalThoughtMsg = createA2AMessage(
-                          agent.id,
-                          "all",
-                          "proposal",
-                          result,
-                          claimId
+                    if (!crossDebateResponse.error) {
+                      interface TaskStartResult {
+                        taskId: string;
+                        status: string;
+                      }
+                      const taskId = (
+                        crossDebateResponse.result as TaskStartResult
+                      )?.taskId;
+                      if (taskId) {
+                        const result = await waitForTaskCompletion(
+                          endpointUrl,
+                          taskId
                         );
-                        messages.push(finalThoughtMsg);
-                        sendEvent("message", finalThoughtMsg);
+                        if (result) {
+                          const finalThoughtMsg = createA2AMessage(
+                            agent.id,
+                            "all",
+                            "proposal",
+                            result,
+                            claimId
+                          );
+                          messages.push(finalThoughtMsg);
+                          sendEvent("message", finalThoughtMsg);
+                        }
                       }
                     }
                   }
-                }
-              }
+                })
+              );
             }
           }
 
@@ -591,17 +585,12 @@ Provide a VERY brief final thought (1 sentence max) considering these viewpoints
 
           const synthesisPrompt = `Claim: "${claim}"
 
-Initial Peer Reviews:
-${allReviews}
+Reviews: ${allReviews}
+${followUpQuestions ? `Debate: ${allDebateResponses}\n` : ""}
 
-${followUpQuestions ? `Follow-up Discussion:\n${allDebateResponses}\n\n` : ""}
-
-Based on the complete discussion above, provide a VERY BRIEF final synthesis:
-- Overall agreement level: "agreed", "disagreed", or "partial"
-- Brief explanation (1-2 sentences max)
-- Final confidence (0-1)
-
-Be extremely concise.`;
+Synthesis (2 sentences max):
+- Agreement: "agreed", "disagreed", or "partial"
+- Confidence (0-1)`;
 
           const synthesisTaskParams: StartTaskParams = {
             taskType: "claim_validation",

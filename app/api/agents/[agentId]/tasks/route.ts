@@ -160,13 +160,9 @@ async function handleStartTask(
         throw new Error("Agent executor not initialized");
       }
 
-      const prompt = `Review this claim: "${claim}"
+      const prompt = `Claim: "${claim}"
 
-Provide a VERY BRIEF assessment (1-2 sentences max):
-- Agree or disagree with brief reason?
-- Confidence level (0-1)?
-
-Be extremely concise - one sentence preferred.`;
+Assess: Agree/disagree? Confidence (0-1)? One sentence max.`;
 
       const response = await executor.invoke({ input: prompt });
       result = response.output ?? "Unable to provide review.";
