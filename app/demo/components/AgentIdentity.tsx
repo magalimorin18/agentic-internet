@@ -80,7 +80,7 @@ export default function AgentIdentity({ url }: { url: string }) {
                         href={article.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline text-sm font-medium block mb-1"
+                        className="text-purple-600 hover:underline text-sm font-medium block mb-1"
                       >
                         {article.url}
                       </a>
