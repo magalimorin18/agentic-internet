@@ -37,7 +37,7 @@ export default function AgentIdentity({ url }: { url: string }) {
 
   return (
     <div className="p-4 border rounded-xl mb-6 bg-gray-50">
-      <h3 className="font-semibold text-lg mb-2">Agent Identity</h3>
+      <h3 className="font-semibold text-lg mb-2">Primary Agent Identity</h3>
       <p className="mb-2">
         <strong>Source:</strong>{" "}
         {url && (url.startsWith("http://") || url.startsWith("https://")) ? (
@@ -69,7 +69,7 @@ export default function AgentIdentity({ url }: { url: string }) {
           {initResult.relatedArticles &&
             initResult.relatedArticles.length > 0 && (
               <div className="mt-4">
-                <strong>Related Articles:</strong>
+                <strong>Peer Agent Reviewers:</strong>
                 <div className="mt-2 space-y-3">
                   {initResult.relatedArticles.map((article, index) => (
                     <div

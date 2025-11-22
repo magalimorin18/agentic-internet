@@ -57,47 +57,101 @@ export default function DemoInput() {
     }
   }
 
+  const exampleLinks = [
+    {
+      title: "The Measurement Problem in Quantum Mechanics",
+      url: "https://arxiv.org/abs/1908.03920",
+    },
+    {
+      title: "CRISPR-Cas9: A Revolutionary Gene Editing Technology",
+      url: "https://www.nature.com/articles/nature24644",
+    },
+    {
+      title: "The Hard Problem of Consciousness",
+      url: "https://www.scholarpedia.org/article/Hard_problem_of_consciousness",
+    },
+  ];
+
   return (
     <main className="p-12 max-w-xl mx-auto">
-      <h2 className="text-3xl font-semibold mb-6">Generate an Agent</h2>
+      <h2 className="text-3xl font-semibold mb-6">
+        Transform Research Papers into AI Agents
+      </h2>
+      <p className="text-gray-600 mb-8">
+        Convert any research paper into an autonomous AI agent that can extract
+        claims, engage in peer review discussions and reach consensus with other
+        document agents.
+      </p>
 
-      <input
-        className="border p-3 rounded w-full mb-4"
-        placeholder="Paste research paper URL..."
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !isLoading) {
-            handleSubmit();
-          }
-        }}
-      />
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Research Paper URL
+        </label>
+        <input
+          className="border p-3 rounded w-full"
+          placeholder="Paste research paper URL..."
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isLoading) {
+              handleSubmit();
+            }
+          }}
+        />
+        <div className="mt-3">
+          <p className="text-xs text-gray-500 mb-2">
+            Or try one of these example papers:
+          </p>
+          <div className="space-y-2">
+            {exampleLinks.map((example, index) => (
+              <button
+                key={index}
+                onClick={() => setUrl(example.url)}
+                className="block w-full text-left text-xs text-blue-600 hover:text-blue-800 hover:underline p-2 rounded bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                {example.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
-      <input
-        type="number"
-        min="1"
-        className="border p-3 rounded w-full mb-4"
-        placeholder="Number of Peer Agent Reviewers"
-        value={numPeerReviewers}
-        onChange={(e) => {
-          const value = e.target.value;
-          if (value === "" || /^\d+$/.test(value)) {
-            setNumPeerReviewers(value);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !isLoading) {
-            handleSubmit();
-          }
-        }}
-      />
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Number of Peer Agent Reviewers
+        </label>
+        <p className="text-xs text-gray-500 mb-2">
+          This determines how many related articles will be found and converted
+          into peer review agents. Each peer agent will have a separate
+          discussion with the primary agent about the claims. The final
+          confidence score will be the average of all individual discussions.
+        </p>
+        <input
+          type="number"
+          min="1"
+          className="border p-3 rounded w-full"
+          placeholder="Number of Peer Agent Reviewers"
+          value={numPeerReviewers}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === "" || /^\d+$/.test(value)) {
+              setNumPeerReviewers(value);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isLoading) {
+              handleSubmit();
+            }
+          }}
+        />
+      </div>
 
       <button
         onClick={handleSubmit}
         disabled={isLoading}
         className="mt-4 px-5 py-2 bg-black text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? "Initializing Agent..." : "Create Agent"}
+        {isLoading ? "Initializing Agents..." : "Create Agents"}
       </button>
     </main>
   );
