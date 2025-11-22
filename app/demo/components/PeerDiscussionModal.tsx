@@ -284,28 +284,6 @@ export default function PeerDiscussionModal({
           </button>
         </div>
 
-        {isLoading && (
-          <div className="text-center py-8">
-            <p className="text-gray-600">
-              Initializing agents and starting discussion...
-            </p>
-            <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          </div>
-        )}
-
-        {error && (
-          <div className="p-4 bg-red-50 text-red-800 rounded-lg mb-4">
-            <p className="font-semibold">Error:</p>
-            <p>{error}</p>
-            <button
-              onClick={fetchDiscussion}
-              className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
         {discussion && (
           <>
             {/* Agent Identities */}
@@ -583,6 +561,26 @@ export default function PeerDiscussionModal({
                     </p>
                   </div>
                 ) : null}
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="text-center py-8">
+                <p className="text-gray-600">Agent discussing...</p>
+                <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+              </div>
+            )}
+
+            {error && (
+              <div className="p-4 bg-red-50 text-red-800 rounded-lg mb-4">
+                <p className="font-semibold">Error:</p>
+                <p>{error}</p>
+                <button
+                  onClick={fetchDiscussion}
+                  className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm"
+                >
+                  Retry
+                </button>
               </div>
             )}
 
