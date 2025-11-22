@@ -273,9 +273,9 @@ export default function PeerDiscussionModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20 p-4">
-      <div className="bg-white p-6 rounded-xl w-full max-w-3xl max-h-[90vh] shadow-xl overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold">A2A Agent Discussion</h3>
+      <div className="bg-white p-6 rounded-xl w-full max-w-7xl max-h-[95vh] shadow-xl overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-semibold">A2A Agent Discussion</h3>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -381,9 +381,12 @@ export default function PeerDiscussionModal({
               );
 
               return (
-                <div className="mb-4">
+                <div className="mb-6">
+                  <h4 className="text-base font-semibold text-gray-700 mb-4">
+                    Parallel Discussions
+                  </h4>
                   {/* Display threads in a grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
                     {conversationThreads.map((thread) => {
                       const peerColors = getAgentColor(thread.peerAgent.id);
                       const primaryColors = getAgentColor(primaryAgentId);
@@ -391,18 +394,18 @@ export default function PeerDiscussionModal({
                       return (
                         <div
                           key={thread.peerAgent.id}
-                          className="border border-gray-200 rounded-lg p-3 bg-gray-50"
+                          className="border border-gray-200 rounded-lg p-4 bg-gray-50"
                         >
                           <div
                             className={`mb-2 p-2 rounded ${peerColors.bg} border ${peerColors.border}`}
                           >
                             <p
-                              className={`text-xs font-semibold ${peerColors.text}`}
+                              className={`text-sm font-semibold ${peerColors.text}`}
                             >
                               {thread.peerAgent.name}
                             </p>
                           </div>
-                          <div className="space-y-2 max-h-96 overflow-y-auto">
+                          <div className="space-y-2 max-h-[600px] overflow-y-auto">
                             {thread.messages.length > 0 ? (
                               thread.messages.map((message) => {
                                 const isFromPrimary =
@@ -421,7 +424,7 @@ export default function PeerDiscussionModal({
                                     className={`p-2 rounded-lg border-l-4 ${colors.border} ${colors.bg}`}
                                   >
                                     <p
-                                      className={`text-xs ${colors.text} leading-relaxed whitespace-pre-wrap`}
+                                      className={`text-sm ${colors.text} leading-relaxed whitespace-pre-wrap`}
                                     >
                                       <span className="font-semibold">
                                         {agentName}:
@@ -444,9 +447,9 @@ export default function PeerDiscussionModal({
 
                   {/* General messages (to "all" or synthesis messages) */}
                   {generalMessages.length > 0 && (
-                    <div className="mt-4">
-                      <h5 className="text-xs font-semibold text-gray-600 mb-2">
-                        General Discussion
+                    <div className="mt-6">
+                      <h5 className="text-sm font-semibold text-gray-600 mb-3">
+                        Conclusion
                       </h5>
                       <div className="space-y-2">
                         {generalMessages.map((message) => {

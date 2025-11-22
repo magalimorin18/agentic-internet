@@ -88,13 +88,6 @@ export default function DemoInput() {
       >
         {isLoading ? "Initializing Agent..." : "Create Agent"}
       </button>
-
-      <button
-        onClick={handleInitAgent}
-        className="mt-4 ml-4 px-5 py-2 bg-blue-600 text-white rounded-xl"
-      >
-        Initialize Agent (Test API)
-      </button>
     </main>
   );
 }
