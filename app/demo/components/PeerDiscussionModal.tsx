@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { AgentDiscussion, A2AMessage } from "@/types/a2a";
+import type { AgentCard } from "@/lib/a2a-agent-card";
 
 type PeerDiscussionModalProps = {
   claim: { id: string; claim: string; score?: number };
@@ -19,6 +20,11 @@ export default function PeerDiscussionModal({
   const [discussion, setDiscussion] = useState<AgentDiscussion | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAgentCard, setSelectedAgentCard] = useState<{
+    agentId: string;
+    card: AgentCard | null;
+  } | null>(null);
+  const [loadingAgentCard, setLoadingAgentCard] = useState(false);
 
   const fetchDiscussion = useCallback(async () => {
     if (!url || url === "Unknown") {
@@ -180,6 +186,35 @@ export default function PeerDiscussionModal({
     };
   }
 
+  const fetchAgentCard = useCallback(
+    async (agentId: string) => {
+      setLoadingAgentCard(true);
+      try {
+        // Get the source URL from the agent in the discussion
+        const agent = discussion?.agents.find((a) => a.id === agentId);
+        const sourceUrl = agent?.sourceUrl;
+
+        const url = `/api/agents/${agentId}${
+          sourceUrl ? `?sourceUrl=${encodeURIComponent(sourceUrl)}` : ""
+        }`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("Failed to fetch agent card");
+        }
+
+        const card = (await response.json()) as AgentCard;
+        setSelectedAgentCard({ agentId, card });
+      } catch (err) {
+        console.error("Error fetching agent card:", err);
+        setSelectedAgentCard({ agentId, card: null });
+      } finally {
+        setLoadingAgentCard(false);
+      }
+    },
+    [discussion]
+  );
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20 p-4">
       <div className="bg-white p-6 rounded-xl w-full max-w-3xl max-h-[90vh] shadow-xl overflow-y-auto">
@@ -222,25 +257,44 @@ export default function PeerDiscussionModal({
               {discussion.agents.map((agent) => {
                 const colors = getAgentColor(agent.id);
                 return (
-                  <div key={agent.id} className={`p-2 rounded-lg ${colors.bg}`}>
-                    <div className="flex items-center gap-2">
-                      <span className={`font-semibold text-sm ${colors.text}`}>
-                        {agent.name}
-                      </span>
-                    </div>
-                    {agent.sourceUrl && (
-                      <div className="mt-1 text-xs">
-                        <span className="text-gray-600">Source: </span>
-                        <a
-                          href={agent.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline break-all"
-                        >
-                          {agent.sourceUrl}
-                        </a>
+                  <div
+                    key={agent.id}
+                    className={`p-2 rounded-lg ${colors.bg} mb-2 last:mb-0`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-semibold text-sm ${colors.text}`}
+                          >
+                            {agent.name}
+                          </span>
+                        </div>
+                        {agent.sourceUrl && (
+                          <div className="mt-1 text-xs">
+                            <span className="text-gray-600">Source: </span>
+                            <a
+                              href={agent.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline break-all"
+                            >
+                              {agent.sourceUrl}
+                            </a>
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <button
+                        onClick={() => fetchAgentCard(agent.id)}
+                        className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+                        disabled={loadingAgentCard}
+                      >
+                        {loadingAgentCard &&
+                        selectedAgentCard?.agentId === agent.id
+                          ? "Loading..."
+                          : "View Agent Card"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -362,6 +416,150 @@ export default function PeerDiscussionModal({
           </>
         )}
       </div>
+
+      {/* Agent Card Modal */}
+      {selectedAgentCard && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-30 p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-2xl max-h-[90vh] shadow-xl overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold">Agent Card</h3>
+              <button
+                onClick={() => setSelectedAgentCard(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {selectedAgentCard.card ? (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-lg mb-2">
+                    {selectedAgentCard.card.name}
+                  </h4>
+                  <p className="text-sm text-gray-600 mb-4">
+                    {selectedAgentCard.card.description}
+                  </p>
+                  <div className="text-xs text-gray-500">
+                    Version: {selectedAgentCard.card.version}
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h5 className="font-semibold mb-2">Capabilities</h5>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium">
+                        Supported Modalities:{" "}
+                      </span>
+                      <span className="text-gray-600">
+                        {selectedAgentCard.card.capabilities.supportedModalities.join(
+                          ", "
+                        )}
+                      </span>
+                    </div>
+                    {selectedAgentCard.card.capabilities.supportedTasks && (
+                      <div>
+                        <span className="font-medium">Supported Tasks: </span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {selectedAgentCard.card.capabilities.supportedTasks.map(
+                            (task) => (
+                              <span
+                                key={task}
+                                className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs"
+                              >
+                                {task}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {selectedAgentCard.card.capabilities.maxConcurrentTasks && (
+                      <div>
+                        <span className="font-medium">
+                          Max Concurrent Tasks:{" "}
+                        </span>
+                        <span className="text-gray-600">
+                          {
+                            selectedAgentCard.card.capabilities
+                              .maxConcurrentTasks
+                          }
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h5 className="font-semibold mb-2">Endpoints</h5>
+                  <div className="space-y-1 text-sm">
+                    <div>
+                      <span className="font-medium">Base URL: </span>
+                      <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                        {selectedAgentCard.card.endpoints.baseUrl}
+                      </code>
+                    </div>
+                    {selectedAgentCard.card.endpoints.tasks && (
+                      <div>
+                        <span className="font-medium">Tasks: </span>
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                          {selectedAgentCard.card.endpoints.tasks}
+                        </code>
+                      </div>
+                    )}
+                    {selectedAgentCard.card.endpoints.health && (
+                      <div>
+                        <span className="font-medium">Health: </span>
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                          {selectedAgentCard.card.endpoints.health}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedAgentCard.card.authentication &&
+                  selectedAgentCard.card.authentication.length > 0 && (
+                    <div className="border-t pt-4">
+                      <h5 className="font-semibold mb-2">Authentication</h5>
+                      <div className="space-y-2 text-sm">
+                        {selectedAgentCard.card.authentication.map(
+                          (auth, idx) => (
+                            <div key={idx}>
+                              <span className="font-medium">Type: </span>
+                              <span className="text-gray-600">{auth.type}</span>
+                              {auth.description && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {auth.description}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500">
+                  {loadingAgentCard
+                    ? "Loading agent card..."
+                    : "Failed to load agent card"}
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={() => setSelectedAgentCard(null)}
+              className="w-full mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
