@@ -19,7 +19,7 @@ type ResponseData = {
 
 export async function POST(req: NextRequest) {
   try {
-    const userAccountId = "0.0.7305752";
+    const userAccountId = process.env.HEDERA_ACCOUNT_ID || "0.0.7305752";
 
     // Get URL from request body
     const body = await req.json();

@@ -1,6 +1,12 @@
 /**
  * A2A (Agent-to-Agent) Message Types
- * Based on A2A standard for inter-agent communication
+ *
+ * This file defines types for agent communication that are compatible with both:
+ * - The official A2A Protocol (https://github.com/a2aproject/A2A)
+ * - Our application's frontend display requirements
+ *
+ * Agent communication now uses the A2A Protocol with JSON-RPC 2.0 over HTTP(S),
+ * but these types provide a simplified interface for the frontend.
  */
 
 export type A2AMessageType =

@@ -1,7 +1,7 @@
-import { initializeAgent } from "@/server/initialize-agent";
 import { NextRequest } from "next/server";
 import type { AgentDiscussion, A2AMessage, AgentIdentity } from "@/types/a2a";
 import { createHederaSettlement } from "@/lib/hedera-settlement";
+import { sendA2ARequest, StartTaskParams, A2ATask } from "@/lib/a2a-protocol";
 
 export const runtime = "nodejs";
 
@@ -74,8 +74,6 @@ function createA2AMessage(
 
 export async function POST(req: NextRequest) {
   try {
-    const userAccountId = "0.0.7305752";
-
     // Get request body
     const body = await req.json();
     const { url, claim, claimId, relatedArticles } = body;
@@ -91,19 +89,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Select a related article URL for the peer agent
-    // Use the first related article if available, otherwise fall back to main URL
-    let peerAgentUrl = url;
-    if (
+    const peerArticleUrl =
       relatedArticles &&
       Array.isArray(relatedArticles) &&
       relatedArticles.length > 0
-    ) {
-      // Use the first related article URL
-      peerAgentUrl = relatedArticles[0].url || url;
-    }
+        ? relatedArticles[0].url || url
+        : url;
+
+    // Get base URL for agent endpoints
+    const baseUrl = `${req.nextUrl.origin}/api/agents`;
 
     // Initialize primary agent (the original agent) with main URL
-    const primaryAgentId = "agent_primary";
+    const primaryAgentId = `agent_primary_${Date.now()}`;
+    const primaryAgentUrl = `${baseUrl}/${primaryAgentId}`;
     const primaryAgent = generateAgentIdentity(
       primaryAgentId,
       "Primary Agent",
@@ -112,48 +110,101 @@ export async function POST(req: NextRequest) {
     primaryAgent.sourceUrl = url;
 
     // Initialize peer agent (second opinion) with related article URL
-    const peerAgentId = "agent_peer";
+    const peerAgentId = `agent_peer_${Date.now()}`;
+    const peerAgentEndpointUrl = `${baseUrl}/${peerAgentId}`;
     const peerAgent = generateAgentIdentity(
       peerAgentId,
       "Peer Reviewer",
       "Independent Validator"
     );
-    peerAgent.sourceUrl = peerAgentUrl;
+    peerAgent.sourceUrl = peerArticleUrl;
 
-    const primaryExecutor = await initializeAgent(userAccountId, url);
-    const peerExecutor = await initializeAgent(userAccountId, peerAgentUrl);
+    // Initialize agents by fetching their agent cards (this triggers initialization)
+    await fetch(`${primaryAgentUrl}?sourceUrl=${encodeURIComponent(url)}`);
+    await fetch(
+      `${peerAgentEndpointUrl}?sourceUrl=${encodeURIComponent(peerArticleUrl)}`
+    );
 
     const messages: A2AMessage[] = [];
 
-    // Step 1: Primary agent queries peer about the claim
-    const queryPrompt = `Review this claim: "${claim}"
+    // Step 1: Primary agent queries peer about the claim using A2A protocol
+    const queryMessage = `Can you review this claim: "${claim}"?`;
 
-Provide a BRIEF assessment (2-3 sentences max):
-- Agree or disagree?
-- Confidence level (0-1)?
-- Key evidence (one sentence)?
-
-Keep it concise and direct.`;
-
-    const peerResponse = await peerExecutor.invoke({
-      input: queryPrompt,
-    });
-
-    const peerReview = peerResponse.output ?? "Unable to provide review.";
-
-    // Extract confidence from peer review
-    const peerConfidence = extractConfidence(peerReview);
-
-    // Create A2A messages
     messages.push(
       createA2AMessage(
         primaryAgentId,
         peerAgentId,
         "query",
-        `Can you review this claim: "${claim}"?`,
+        queryMessage,
         claimId
       )
     );
+
+    // Use A2A protocol to start a task on peer agent
+    const reviewTaskParams: StartTaskParams = {
+      taskType: "claim_review",
+      input: {
+        modality: "text",
+        content: claim,
+      },
+      metadata: {
+        sourceUrl: peerArticleUrl,
+        claimId,
+      },
+    };
+
+    const reviewTaskResponse = await sendA2ARequest(
+      peerAgentEndpointUrl,
+      "StartTask",
+      reviewTaskParams
+    );
+
+    if (reviewTaskResponse.error) {
+      throw new Error(
+        `Failed to start review task: ${reviewTaskResponse.error.message}`
+      );
+    }
+
+    interface TaskStartResult {
+      taskId: string;
+      status: string;
+    }
+
+    const reviewTaskId = (reviewTaskResponse.result as TaskStartResult)?.taskId;
+    if (!reviewTaskId) {
+      throw new Error("Failed to get review task ID");
+    }
+
+    // Wait for task to complete and get result
+    let peerReview = "Unable to provide review.";
+    let attempts = 0;
+    while (attempts < 10) {
+      await new Promise((resolve) => setTimeout(resolve, 500)); // Wait 500ms
+      const statusResponse = await sendA2ARequest(
+        peerAgentEndpointUrl,
+        "GetTaskStatus",
+        {
+          taskId: reviewTaskId,
+        }
+      );
+
+      if (statusResponse.error) {
+        break;
+      }
+
+      const task = statusResponse.result as A2ATask;
+      if (task.status === "completed" && task.result?.artifacts?.[0]) {
+        peerReview = task.result.artifacts[0].content as string;
+        break;
+      } else if (task.status === "failed") {
+        break;
+      }
+
+      attempts++;
+    }
+
+    // Extract confidence from peer review
+    const peerConfidence = extractConfidence(peerReview);
 
     messages.push(
       createA2AMessage(
@@ -168,18 +219,62 @@ Keep it concise and direct.`;
       )
     );
 
-    // Step 2: Analyze agreement level
+    // Step 2: Analyze agreement level using A2A protocol
     const agreementPrompt = `Claim: "${claim}"
 
 Peer Review: ${peerReview}
 
 Respond with ONE WORD: "agreed", "disagreed", or "partial". Then ONE SENTENCE explaining why.`;
 
-    const agreementResponse = await primaryExecutor.invoke({
-      input: agreementPrompt,
-    });
+    const agreementTaskParams: StartTaskParams = {
+      taskType: "claim_validation",
+      input: {
+        modality: "text",
+        content: agreementPrompt,
+      },
+      metadata: {
+        sourceUrl: url,
+        claimId,
+      },
+    };
 
-    const agreementText = agreementResponse.output ?? "partial";
+    const agreementTaskResponse = await sendA2ARequest(
+      primaryAgentUrl,
+      "StartTask",
+      agreementTaskParams
+    );
+
+    let agreementText = "partial";
+    if (!agreementTaskResponse.error) {
+      const agreementTaskId = (agreementTaskResponse.result as TaskStartResult)
+        ?.taskId;
+      if (agreementTaskId) {
+        let attempts = 0;
+        while (attempts < 10) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const statusResponse = await sendA2ARequest(
+            primaryAgentUrl,
+            "GetTaskStatus",
+            { taskId: agreementTaskId }
+          );
+
+          if (statusResponse.error) {
+            break;
+          }
+
+          const task = statusResponse.result as A2ATask;
+          if (task.status === "completed" && task.result?.artifacts?.[0]) {
+            agreementText = task.result.artifacts[0].content as string;
+            break;
+          } else if (task.status === "failed") {
+            break;
+          }
+
+          attempts++;
+        }
+      }
+    }
+
     const isAgreed = agreementText.toLowerCase().includes("agreed");
     const isDisagreed = agreementText.toLowerCase().includes("disagreed");
 
@@ -204,17 +299,56 @@ Respond with ONE WORD: "agreed", "disagreed", or "partial". Then ONE SENTENCE ex
       )
     );
 
-    // Step 3: Generate settlement proposal (for Hedera)
-    const settlementPrompt = `Create a BRIEF settlement statement (one sentence) for: "${claim}"
+    // Step 3: Generate settlement proposal (for Hedera) using A2A protocol
+    const settlementTaskParams: StartTaskParams = {
+      taskType: "settlement_proposal",
+      input: {
+        modality: "text",
+        content: claim,
+      },
+      metadata: {
+        sourceUrl: peerArticleUrl,
+        claimId,
+      },
+    };
 
-This will be recorded on Hedera. Be concise.`;
+    const settlementTaskResponse = await sendA2ARequest(
+      peerAgentEndpointUrl,
+      "StartTask",
+      settlementTaskParams
+    );
 
-    const settlementResponse = await peerExecutor.invoke({
-      input: settlementPrompt,
-    });
+    let settlementStatement = "Settlement proposal generated.";
+    if (!settlementTaskResponse.error) {
+      const settlementTaskId = (
+        settlementTaskResponse.result as TaskStartResult
+      )?.taskId;
+      if (settlementTaskId) {
+        let attempts = 0;
+        while (attempts < 10) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const statusResponse = await sendA2ARequest(
+            peerAgentEndpointUrl,
+            "GetTaskStatus",
+            { taskId: settlementTaskId }
+          );
 
-    const settlementStatement =
-      settlementResponse.output ?? "Settlement proposal generated.";
+          if (statusResponse.error) {
+            break;
+          }
+
+          const task = statusResponse.result as A2ATask;
+          if (task.status === "completed" && task.result?.artifacts?.[0]) {
+            settlementStatement = task.result.artifacts[0].content as string;
+            break;
+          } else if (task.status === "failed") {
+            break;
+          }
+
+          attempts++;
+        }
+      }
+    }
 
     const settlementResult = await createHederaSettlement({
       claimId: claimId || "unknown",
