@@ -33,6 +33,9 @@ export default function DemoInput() {
 
       console.log("Agent initialized:", data);
 
+      // Store the initialization result in sessionStorage
+      sessionStorage.setItem("agentInitResult", JSON.stringify(data));
+
       // Navigate to the agent page after successful initialization
       router.push(`/demo/agent?url=${encodeURIComponent(url)}`);
     } catch (error) {
