@@ -4,11 +4,6 @@ import type { AgentDiscussion, A2AMessage, AgentIdentity } from "@/types/a2a";
 
 export const runtime = "nodejs";
 
-type ResponseData = {
-  discussion: AgentDiscussion;
-  error?: string;
-};
-
 /**
  * Generates a simple agent identity
  */
@@ -89,14 +84,14 @@ export async function POST(req: NextRequest) {
     const messages: A2AMessage[] = [];
 
     // Step 1: Primary agent queries peer about the claim
-    const queryPrompt = `A peer agent is asking you to review the following claim extracted from the document: "${claim}"
+    const queryPrompt = `Review this claim: "${claim}"
 
-Please analyze this claim based on the content in your memory. Provide your assessment:
-1. Do you agree or disagree with this claim?
-2. What is your confidence level (0-1)?
-3. What evidence supports or contradicts this claim?
+Provide a BRIEF assessment (2-3 sentences max):
+- Agree or disagree?
+- Confidence level (0-1)?
+- Key evidence (one sentence)?
 
-Format your response as a clear, professional peer review.`;
+Keep it concise and direct.`;
 
     const peerResponse = await peerExecutor.invoke({
       input: queryPrompt,
@@ -129,11 +124,11 @@ Format your response as a clear, professional peer review.`;
     );
 
     // Step 2: Analyze agreement level
-    const agreementPrompt = `Based on the peer review, determine if there is agreement on the claim: "${claim}"
+    const agreementPrompt = `Claim: "${claim}"
 
 Peer Review: ${peerReview}
 
-Respond with one word: "agreed", "disagreed", or "partial". Then provide a brief explanation.`;
+Respond with ONE WORD: "agreed", "disagreed", or "partial". Then ONE SENTENCE explaining why.`;
 
     const agreementResponse = await primaryExecutor.invoke({
       input: agreementPrompt,
@@ -167,9 +162,9 @@ Respond with one word: "agreed", "disagreed", or "partial". Then provide a brief
     );
 
     // Step 3: Generate settlement proposal (for Hedera)
-    const settlementPrompt = `Generate a settlement proposal for the claim: "${claim}"
+    const settlementPrompt = `Create a BRIEF settlement statement (one sentence) for: "${claim}"
 
-Based on the discussion, create a brief settlement statement that could be recorded on Hedera blockchain.`;
+This will be recorded on Hedera. Be concise.`;
 
     const settlementResponse = await peerExecutor.invoke({
       input: settlementPrompt,

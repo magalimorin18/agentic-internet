@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { AgentDiscussion, A2AMessage } from "@/types/a2a";
 
 type PeerDiscussionModalProps = {
@@ -18,13 +18,7 @@ export default function PeerDiscussionModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (claim && url) {
-      fetchDiscussion();
-    }
-  }, [claim, url]);
-
-  async function fetchDiscussion() {
+  const fetchDiscussion = useCallback(async () => {
     if (!url || url === "Unknown") {
       setError("URL is required for agent discussion");
       return;
@@ -61,7 +55,13 @@ export default function PeerDiscussionModal({
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [url, claim]);
+
+  useEffect(() => {
+    if (claim && url) {
+      fetchDiscussion();
+    }
+  }, [claim, url, fetchDiscussion]);
 
   function getMessageTypeColor(type: A2AMessage["type"]): string {
     switch (type) {
@@ -76,10 +76,6 @@ export default function PeerDiscussionModal({
       default:
         return "bg-gray-50 text-gray-700";
     }
-  }
-
-  function formatTimestamp(timestamp: number): string {
-    return new Date(timestamp).toLocaleTimeString();
   }
 
   return (
@@ -103,7 +99,9 @@ export default function PeerDiscussionModal({
 
         {isLoading && (
           <div className="text-center py-8">
-            <p className="text-gray-600">Initializing agents and starting discussion...</p>
+            <p className="text-gray-600">
+              Initializing agents and starting discussion...
+            </p>
             <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
           </div>
         )}
@@ -124,58 +122,42 @@ export default function PeerDiscussionModal({
         {discussion && (
           <>
             {/* Agent Identities */}
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm font-semibold mb-2">Participants:</p>
-              <div className="flex gap-4">
+            <div className="mb-3 p-2 bg-blue-50 rounded-lg">
+              <div className="flex gap-3 text-xs">
                 {discussion.agents.map((agent) => (
-                  <div key={agent.id} className="text-sm">
-                    <span className="font-semibold">{agent.name}</span>
-                    {agent.role && (
-                      <span className="text-gray-600"> ({agent.role})</span>
-                    )}
-                    {agent.did && (
-                      <p className="text-xs text-gray-500 mt-1">{agent.did}</p>
-                    )}
-                  </div>
+                  <span key={agent.id} className="font-semibold text-gray-700">
+                    {agent.name}
+                  </span>
                 ))}
               </div>
             </div>
 
             {/* Messages */}
-            <div className="space-y-3 mb-4">
-              <p className="text-sm font-semibold text-gray-700">Conversation:</p>
+            <div className="space-y-2 mb-4">
               {discussion.messages.map((message: A2AMessage) => {
-                const agent = discussion.agents.find((a) => a.id === message.from);
+                const agent = discussion.agents.find(
+                  (a) => a.id === message.from
+                );
                 return (
                   <div
                     key={message.messageId}
-                    className="p-3 border rounded-lg bg-white"
+                    className="p-2 border-l-2 border-gray-200 pl-3"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">
-                          {agent?.name || message.from}
-                        </span>
-                        <span
-                          className={`px-2 py-1 rounded text-xs ${getMessageTypeColor(
-                            message.type
-                          )}`}
-                        >
-                          {message.type}
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {formatTimestamp(message.timestamp)}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-xs text-gray-700">
+                        {agent?.name || message.from}:
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-xs ${getMessageTypeColor(
+                          message.type
+                        )}`}
+                      >
+                        {message.type}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    <p className="text-sm text-gray-800 leading-relaxed">
                       {message.content}
                     </p>
-                    {message.metadata?.confidence && (
-                      <p className="text-xs text-gray-500 mt-2">
-                        Confidence: {message.metadata.confidence}
-                      </p>
-                    )}
                   </div>
                 );
               })}
@@ -183,11 +165,13 @@ export default function PeerDiscussionModal({
 
             {/* Final Agreement */}
             {discussion.finalAgreement && (
-              <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
-                <p className="font-semibold mb-2">Final Agreement:</p>
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-semibold text-gray-600">
+                    Result:
+                  </span>
                   <span
-                    className={`px-3 py-1 rounded font-semibold ${
+                    className={`px-2 py-1 rounded text-xs font-semibold ${
                       discussion.finalAgreement.status === "agreed"
                         ? "bg-green-200 text-green-800"
                         : discussion.finalAgreement.status === "disagreed"
@@ -197,14 +181,11 @@ export default function PeerDiscussionModal({
                   >
                     {discussion.finalAgreement.status.toUpperCase()}
                   </span>
-                  <span className="text-sm text-gray-600">
-                    Confidence: {discussion.finalAgreement.confidence}
-                  </span>
                 </div>
                 {discussion.finalAgreement.settlementHash && (
                   <div className="mt-2">
-                    <p className="text-xs text-gray-600 mb-1">Hedera Settlement:</p>
-                    <code className="text-xs bg-white p-2 rounded border block break-all">
+                    <p className="text-xs text-gray-600 mb-1">Hedera:</p>
+                    <code className="text-xs bg-white p-1.5 rounded border block break-all">
                       {discussion.finalAgreement.settlementHash}
                     </code>
                   </div>
