@@ -61,19 +61,91 @@ export default function PeerDiscussionModal({
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Failed to start agent discussion");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to start agent discussion");
       }
 
-      setDiscussion(data.discussion);
+      // Initialize discussion state
+      let currentDiscussion: AgentDiscussion | null = null;
+      const messages: A2AMessage[] = [];
+
+      // Handle Server-Sent Events stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("Failed to get response stream");
+      }
+
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let eventType = "message";
+        let data = "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.substring(7);
+          } else if (line.startsWith("data: ")) {
+            data = line.substring(6);
+          } else if (line === "" && data) {
+            // Process the event
+            try {
+              const eventData = JSON.parse(data);
+
+              if (eventType === "init") {
+                currentDiscussion = {
+                  claimId: eventData.claimId,
+                  claim: eventData.claim,
+                  agents: eventData.agents,
+                  messages: [],
+                };
+                setDiscussion(currentDiscussion);
+              } else if (eventType === "message") {
+                messages.push(eventData);
+                if (currentDiscussion) {
+                  currentDiscussion.messages = [...messages];
+                  setDiscussion({ ...currentDiscussion });
+                }
+              } else if (eventType === "status") {
+                // Optional: show status updates
+                console.log("Status:", eventData.message);
+              } else if (eventType === "final") {
+                if (currentDiscussion) {
+                  currentDiscussion.finalAgreement = eventData;
+                  setDiscussion({ ...currentDiscussion });
+                }
+              } else if (eventType === "error") {
+                throw new Error(eventData.error || "Unknown error");
+              }
+            } catch (parseError) {
+              console.error("Error parsing event data:", parseError);
+            }
+
+            // Reset for next event
+            data = "";
+            eventType = "message";
+          }
+        }
+      }
+
+      setIsLoading(false);
     } catch (err) {
       console.error("Error fetching discussion:", err);
       setError(
         err instanceof Error ? err.message : "Failed to start agent discussion"
       );
-    } finally {
       setIsLoading(false);
     }
   }, [url, claim, relatedArticleUrl]);

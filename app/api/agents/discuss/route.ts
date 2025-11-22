@@ -88,337 +88,389 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Select a related article URL for the peer agent
-    const peerArticleUrl =
-      relatedArticles &&
-      Array.isArray(relatedArticles) &&
-      relatedArticles.length > 0
-        ? relatedArticles[0].url || url
-        : url;
+    // Create a streaming response using Server-Sent Events
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
 
-    // Get base URL for agent endpoints
-    const baseUrl = `${req.nextUrl.origin}/api/agents`;
+        const sendEvent = (type: string, data: unknown) => {
+          const message = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+          controller.enqueue(encoder.encode(message));
+        };
 
-    // Initialize primary agent (the original agent) with main URL
-    const primaryAgentId = `agent_primary_${Date.now()}`;
-    const primaryAgentUrl = `${baseUrl}/${primaryAgentId}`;
-    const primaryAgent = generateAgentIdentity(
-      primaryAgentId,
-      "Primary Agent",
-      "Document Analyzer"
-    );
-    primaryAgent.sourceUrl = url;
+        try {
+          // Select a related article URL for the peer agent
+          const peerArticleUrl =
+            relatedArticles &&
+            Array.isArray(relatedArticles) &&
+            relatedArticles.length > 0
+              ? relatedArticles[0].url || url
+              : url;
 
-    // Initialize peer agent (second opinion) with related article URL
-    const peerAgentId = `agent_peer_${Date.now()}`;
-    const peerAgentEndpointUrl = `${baseUrl}/${peerAgentId}`;
-    const peerAgent = generateAgentIdentity(
-      peerAgentId,
-      "Peer Reviewer",
-      "Independent Validator"
-    );
-    peerAgent.sourceUrl = peerArticleUrl;
+          // Get base URL for agent endpoints
+          const baseUrl = `${req.nextUrl.origin}/api/agents`;
 
-    // Initialize agents by fetching their agent cards (this triggers initialization)
-    await fetch(`${primaryAgentUrl}?sourceUrl=${encodeURIComponent(url)}`);
-    await fetch(
-      `${peerAgentEndpointUrl}?sourceUrl=${encodeURIComponent(peerArticleUrl)}`
-    );
+          // Initialize primary agent (the original agent) with main URL
+          const primaryAgentId = `agent_primary_${Date.now()}`;
+          const primaryAgentUrl = `${baseUrl}/${primaryAgentId}`;
+          const primaryAgent = generateAgentIdentity(
+            primaryAgentId,
+            "Primary Agent",
+            "Document Analyzer"
+          );
+          primaryAgent.sourceUrl = url;
 
-    const messages: A2AMessage[] = [];
+          // Initialize peer agent (second opinion) with related article URL
+          const peerAgentId = `agent_peer_${Date.now()}`;
+          const peerAgentEndpointUrl = `${baseUrl}/${peerAgentId}`;
+          const peerAgent = generateAgentIdentity(
+            peerAgentId,
+            "Peer Reviewer",
+            "Independent Validator"
+          );
+          peerAgent.sourceUrl = peerArticleUrl;
 
-    // Step 1: Primary agent queries peer about the claim using A2A protocol
-    const queryMessage = `Can you review this claim: "${claim}"?`;
+          // Send initial discussion setup
+          sendEvent("init", {
+            claimId: claimId || "unknown",
+            claim,
+            agents: [primaryAgent, peerAgent],
+          });
 
-    messages.push(
-      createA2AMessage(
-        primaryAgentId,
-        peerAgentId,
-        "query",
-        queryMessage,
-        claimId
-      )
-    );
+          // Initialize agents by fetching their agent cards (this triggers initialization)
+          await fetch(
+            `${primaryAgentUrl}?sourceUrl=${encodeURIComponent(url)}`
+          );
+          await fetch(
+            `${peerAgentEndpointUrl}?sourceUrl=${encodeURIComponent(
+              peerArticleUrl
+            )}`
+          );
 
-    // Use A2A protocol to start a task on peer agent
-    const reviewTaskParams: StartTaskParams = {
-      taskType: "claim_review",
-      input: {
-        modality: "text",
-        content: claim,
-      },
-      metadata: {
-        sourceUrl: peerArticleUrl,
-        claimId,
-      },
-    };
+          const messages: A2AMessage[] = [];
 
-    const reviewTaskResponse = await sendA2ARequest(
-      peerAgentEndpointUrl,
-      "StartTask",
-      reviewTaskParams
-    );
+          // Step 1: Primary agent queries peer about the claim using A2A protocol
+          const queryMessage = `Can you review this claim: "${claim}"?`;
 
-    if (reviewTaskResponse.error) {
-      throw new Error(
-        `Failed to start review task: ${reviewTaskResponse.error.message}`
-      );
-    }
+          const queryMsg = createA2AMessage(
+            primaryAgentId,
+            peerAgentId,
+            "query",
+            queryMessage,
+            claimId
+          );
+          messages.push(queryMsg);
+          sendEvent("message", queryMsg);
 
-    interface TaskStartResult {
-      taskId: string;
-      status: string;
-    }
+          // Use A2A protocol to start a task on peer agent
+          const reviewTaskParams: StartTaskParams = {
+            taskType: "claim_review",
+            input: {
+              modality: "text",
+              content: claim,
+            },
+            metadata: {
+              sourceUrl: peerArticleUrl,
+              claimId,
+            },
+          };
 
-    const reviewTaskId = (reviewTaskResponse.result as TaskStartResult)?.taskId;
-    if (!reviewTaskId) {
-      throw new Error("Failed to get review task ID");
-    }
+          sendEvent("status", {
+            message: "Peer agent is reviewing the claim...",
+          });
 
-    // Wait for task to complete and get result
-    let peerReview = "Unable to provide review.";
-    let attempts = 0;
-    while (attempts < 10) {
-      await new Promise((resolve) => setTimeout(resolve, 500)); // Wait 500ms
-      const statusResponse = await sendA2ARequest(
-        peerAgentEndpointUrl,
-        "GetTaskStatus",
-        {
-          taskId: reviewTaskId,
-        }
-      );
+          const reviewTaskResponse = await sendA2ARequest(
+            peerAgentEndpointUrl,
+            "StartTask",
+            reviewTaskParams
+          );
 
-      if (statusResponse.error) {
-        break;
-      }
+          if (reviewTaskResponse.error) {
+            throw new Error(
+              `Failed to start review task: ${reviewTaskResponse.error.message}`
+            );
+          }
 
-      const task = statusResponse.result as A2ATask;
-      if (task.status === "completed" && task.result?.artifacts?.[0]) {
-        peerReview = task.result.artifacts[0].content as string;
-        break;
-      } else if (task.status === "failed") {
-        break;
-      }
+          interface TaskStartResult {
+            taskId: string;
+            status: string;
+          }
 
-      attempts++;
-    }
+          const reviewTaskId = (reviewTaskResponse.result as TaskStartResult)
+            ?.taskId;
+          if (!reviewTaskId) {
+            throw new Error("Failed to get review task ID");
+          }
 
-    // Extract confidence from peer review
-    const peerConfidence = extractConfidence(peerReview);
+          // Wait for task to complete and get result
+          let peerReview = "Unable to provide review.";
+          let attempts = 0;
+          while (attempts < 10) {
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Wait 500ms
+            const statusResponse = await sendA2ARequest(
+              peerAgentEndpointUrl,
+              "GetTaskStatus",
+              {
+                taskId: reviewTaskId,
+              }
+            );
 
-    messages.push(
-      createA2AMessage(
-        peerAgentId,
-        primaryAgentId,
-        "response",
-        peerReview,
-        claimId,
-        {
-          confidence: peerConfidence,
-        }
-      )
-    );
+            if (statusResponse.error) {
+              break;
+            }
 
-    // Step 2: Analyze agreement level using A2A protocol
-    const agreementPrompt = `Claim: "${claim}"
+            const task = statusResponse.result as A2ATask;
+            if (task.status === "completed" && task.result?.artifacts?.[0]) {
+              peerReview = task.result.artifacts[0].content as string;
+              break;
+            } else if (task.status === "failed") {
+              break;
+            }
+
+            attempts++;
+          }
+
+          // Extract confidence from peer review
+          const peerConfidence = extractConfidence(peerReview);
+
+          const responseMsg = createA2AMessage(
+            peerAgentId,
+            primaryAgentId,
+            "response",
+            peerReview,
+            claimId,
+            {
+              confidence: peerConfidence,
+            }
+          );
+          messages.push(responseMsg);
+          sendEvent("message", responseMsg);
+
+          // Step 2: Analyze agreement level using A2A protocol
+          sendEvent("status", { message: "Analyzing agreement level..." });
+
+          const agreementPrompt = `Claim: "${claim}"
 
 Peer Review: ${peerReview}
 
 Respond with ONE WORD: "agreed", "disagreed", or "partial". Then ONE SENTENCE explaining why.`;
 
-    const agreementTaskParams: StartTaskParams = {
-      taskType: "claim_validation",
-      input: {
-        modality: "text",
-        content: agreementPrompt,
-      },
-      metadata: {
-        sourceUrl: url,
-        claimId,
-      },
-    };
+          const agreementTaskParams: StartTaskParams = {
+            taskType: "claim_validation",
+            input: {
+              modality: "text",
+              content: agreementPrompt,
+            },
+            metadata: {
+              sourceUrl: url,
+              claimId,
+            },
+          };
 
-    const agreementTaskResponse = await sendA2ARequest(
-      primaryAgentUrl,
-      "StartTask",
-      agreementTaskParams
-    );
-
-    let agreementText = "partial";
-    if (!agreementTaskResponse.error) {
-      const agreementTaskId = (agreementTaskResponse.result as TaskStartResult)
-        ?.taskId;
-      if (agreementTaskId) {
-        let attempts = 0;
-        while (attempts < 10) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          const statusResponse = await sendA2ARequest(
+          const agreementTaskResponse = await sendA2ARequest(
             primaryAgentUrl,
-            "GetTaskStatus",
-            { taskId: agreementTaskId }
+            "StartTask",
+            agreementTaskParams
           );
 
-          if (statusResponse.error) {
-            break;
+          let agreementText = "partial";
+          if (!agreementTaskResponse.error) {
+            const agreementTaskId = (
+              agreementTaskResponse.result as TaskStartResult
+            )?.taskId;
+            if (agreementTaskId) {
+              let attempts = 0;
+              while (attempts < 10) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                const statusResponse = await sendA2ARequest(
+                  primaryAgentUrl,
+                  "GetTaskStatus",
+                  { taskId: agreementTaskId }
+                );
+
+                if (statusResponse.error) {
+                  break;
+                }
+
+                const task = statusResponse.result as A2ATask;
+                if (
+                  task.status === "completed" &&
+                  task.result?.artifacts?.[0]
+                ) {
+                  agreementText = task.result.artifacts[0].content as string;
+                  break;
+                } else if (task.status === "failed") {
+                  break;
+                }
+
+                attempts++;
+              }
+            }
           }
 
-          const task = statusResponse.result as A2ATask;
-          if (task.status === "completed" && task.result?.artifacts?.[0]) {
-            agreementText = task.result.artifacts[0].content as string;
-            break;
-          } else if (task.status === "failed") {
-            break;
-          }
+          const isAgreed = agreementText.toLowerCase().includes("agreed");
+          const isDisagreed = agreementText.toLowerCase().includes("disagreed");
 
-          attempts++;
-        }
-      }
-    }
+          let finalStatus: "agreed" | "disagreed" | "partial" = "partial";
+          if (isAgreed) finalStatus = "agreed";
+          else if (isDisagreed) finalStatus = "disagreed";
 
-    const isAgreed = agreementText.toLowerCase().includes("agreed");
-    const isDisagreed = agreementText.toLowerCase().includes("disagreed");
+          const agreementMsg = createA2AMessage(
+            primaryAgentId,
+            peerAgentId,
+            isAgreed ? "agreement" : isDisagreed ? "disagreement" : "proposal",
+            agreementText,
+            claimId,
+            {
+              agreementLevel: isAgreed
+                ? "strong"
+                : isDisagreed
+                ? "none"
+                : "moderate",
+            }
+          );
+          messages.push(agreementMsg);
+          sendEvent("message", agreementMsg);
 
-    let finalStatus: "agreed" | "disagreed" | "partial" = "partial";
-    if (isAgreed) finalStatus = "agreed";
-    else if (isDisagreed) finalStatus = "disagreed";
+          // Step 3: Generate settlement proposal (for Hedera) using A2A protocol
+          sendEvent("status", { message: "Generating settlement proposal..." });
 
-    messages.push(
-      createA2AMessage(
-        primaryAgentId,
-        peerAgentId,
-        isAgreed ? "agreement" : isDisagreed ? "disagreement" : "proposal",
-        agreementText,
-        claimId,
-        {
-          agreementLevel: isAgreed
-            ? "strong"
-            : isDisagreed
-            ? "none"
-            : "moderate",
-        }
-      )
-    );
+          const settlementTaskParams: StartTaskParams = {
+            taskType: "settlement_proposal",
+            input: {
+              modality: "text",
+              content: claim,
+            },
+            metadata: {
+              sourceUrl: peerArticleUrl,
+              claimId,
+            },
+          };
 
-    // Step 3: Generate settlement proposal (for Hedera) using A2A protocol
-    const settlementTaskParams: StartTaskParams = {
-      taskType: "settlement_proposal",
-      input: {
-        modality: "text",
-        content: claim,
-      },
-      metadata: {
-        sourceUrl: peerArticleUrl,
-        claimId,
-      },
-    };
-
-    const settlementTaskResponse = await sendA2ARequest(
-      peerAgentEndpointUrl,
-      "StartTask",
-      settlementTaskParams
-    );
-
-    let settlementStatement = "Settlement proposal generated.";
-    if (!settlementTaskResponse.error) {
-      const settlementTaskId = (
-        settlementTaskResponse.result as TaskStartResult
-      )?.taskId;
-      if (settlementTaskId) {
-        let attempts = 0;
-        while (attempts < 10) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          const statusResponse = await sendA2ARequest(
+          const settlementTaskResponse = await sendA2ARequest(
             peerAgentEndpointUrl,
-            "GetTaskStatus",
-            { taskId: settlementTaskId }
+            "StartTask",
+            settlementTaskParams
           );
 
-          if (statusResponse.error) {
-            break;
+          let settlementStatement = "Settlement proposal generated.";
+          if (!settlementTaskResponse.error) {
+            const settlementTaskId = (
+              settlementTaskResponse.result as TaskStartResult
+            )?.taskId;
+            if (settlementTaskId) {
+              let attempts = 0;
+              while (attempts < 10) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                const statusResponse = await sendA2ARequest(
+                  peerAgentEndpointUrl,
+                  "GetTaskStatus",
+                  { taskId: settlementTaskId }
+                );
+
+                if (statusResponse.error) {
+                  break;
+                }
+
+                const task = statusResponse.result as A2ATask;
+                if (
+                  task.status === "completed" &&
+                  task.result?.artifacts?.[0]
+                ) {
+                  settlementStatement = task.result.artifacts[0]
+                    .content as string;
+                  break;
+                } else if (task.status === "failed") {
+                  break;
+                }
+
+                attempts++;
+              }
+            }
           }
 
-          const task = statusResponse.result as A2ATask;
-          if (task.status === "completed" && task.result?.artifacts?.[0]) {
-            settlementStatement = task.result.artifacts[0].content as string;
-            break;
-          } else if (task.status === "failed") {
-            break;
+          sendEvent("status", { message: "Recording settlement on Hedera..." });
+
+          const settlementResult = await createHederaSettlement({
+            claimId: claimId || "unknown",
+            agents: [primaryAgentId, peerAgentId],
+            agreement: finalStatus,
+            timestamp: Date.now(),
+            settlementStatement,
+          });
+
+          if (settlementResult.success) {
+            console.log(
+              `Hedera settlement created successfully: ${settlementResult.transactionHash}`,
+              settlementResult
+            );
+          } else {
+            console.error(
+              `Hedera settlement failed: ${settlementResult.error}`
+            );
           }
 
-          attempts++;
+          const settlementMsg = createA2AMessage(
+            peerAgentId,
+            primaryAgentId,
+            "settlement",
+            settlementStatement,
+            claimId,
+            {
+              ...(settlementResult.success && {
+                settlementHash:
+                  settlementResult.transactionHash ||
+                  settlementResult.transactionId,
+                topicId: settlementResult.topicId,
+                transactionId: settlementResult.transactionId,
+              }),
+              // Include error if settlement failed
+              ...(!settlementResult.success && {
+                settlementError: settlementResult.error,
+              }),
+            }
+          );
+          messages.push(settlementMsg);
+          sendEvent("message", settlementMsg);
+
+          // Calculate final confidence from peer review or default to 0.5
+          const peerResponseMessage = messages.find(
+            (msg) => msg.type === "response" && msg.from === peerAgentId
+          );
+          const finalConfidence =
+            peerResponseMessage?.metadata?.confidence ??
+            extractConfidence(peerReview) ??
+            0.5;
+
+          // Send final agreement
+          const finalAgreement = {
+            status: finalStatus,
+            confidence: finalConfidence,
+            settlementHash: settlementMsg.metadata?.settlementHash,
+            settlementError: settlementMsg.metadata?.settlementError,
+          };
+
+          sendEvent("final", finalAgreement);
+          controller.close();
+        } catch (error) {
+          console.error("Error in agent discussion:", error);
+          sendEvent("error", {
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+          controller.close();
         }
-      }
-    }
-
-    const settlementResult = await createHederaSettlement({
-      claimId: claimId || "unknown",
-      agents: [primaryAgentId, peerAgentId],
-      agreement: finalStatus,
-      timestamp: Date.now(),
-      settlementStatement,
+      },
     });
 
-    if (settlementResult.success) {
-      console.log(
-        `Hedera settlement created successfully: ${settlementResult.transactionHash}`,
-        settlementResult
-      );
-    } else {
-      console.error(`Hedera settlement failed: ${settlementResult.error}`);
-    }
-
-    messages.push(
-      createA2AMessage(
-        peerAgentId,
-        primaryAgentId,
-        "settlement",
-        settlementStatement,
-        claimId,
-        {
-          ...(settlementResult.success && {
-            settlementHash:
-              settlementResult.transactionHash ||
-              settlementResult.transactionId,
-            topicId: settlementResult.topicId,
-            transactionId: settlementResult.transactionId,
-          }),
-          // Include error if settlement failed
-          ...(!settlementResult.success && {
-            settlementError: settlementResult.error,
-          }),
-        }
-      )
-    );
-
-    const settlementMessage = messages[messages.length - 1];
-
-    // Calculate final confidence from peer review or default to 0.5
-    // Look for confidence in the peer response message
-    const peerResponseMessage = messages.find(
-      (msg) => msg.type === "response" && msg.from === peerAgentId
-    );
-    const finalConfidence =
-      peerResponseMessage?.metadata?.confidence ??
-      extractConfidence(peerReview) ??
-      0.5;
-
-    // Build discussion object
-    const discussion: AgentDiscussion = {
-      claimId: claimId || "unknown",
-      claim,
-      agents: [primaryAgent, peerAgent],
-      messages,
-      finalAgreement: {
-        status: finalStatus,
-        confidence: finalConfidence,
-        settlementHash: settlementMessage.metadata?.settlementHash,
-        settlementError: settlementMessage.metadata?.settlementError,
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
       },
-    };
-
-    return Response.json({ discussion });
+    });
   } catch (error) {
-    console.error("Error in agent discussion:", error);
+    console.error("Error setting up agent discussion:", error);
     return Response.json(
       {
         discussion: {} as AgentDiscussion,
