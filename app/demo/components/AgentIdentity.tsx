@@ -82,7 +82,7 @@ export default function AgentIdentity({ url }: { url: string }) {
                         rel="noopener noreferrer"
                         className="text-purple-600 hover:underline text-sm font-medium block mb-1"
                       >
-                        {article.url}
+                        {article.url.substring(0, 50) + "..."}
                       </a>
                       <p className="text-xs text-gray-600">{article.summary}</p>
                     </div>

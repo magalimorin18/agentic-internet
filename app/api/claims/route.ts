@@ -16,7 +16,7 @@ type ResponseData = {
 
 export async function POST(req: NextRequest) {
   try {
-    const userAccountId = "0.0.7305752";
+    const userAccountId = process.env.HEDERA_ACCOUNT_ID || "0.0.7305752";
 
     // Get URL from request body
     const body = await req.json();
@@ -34,7 +34,18 @@ export async function POST(req: NextRequest) {
 
     // Query the agent to extract claims
     const prompt =
-      "Crawls and extracts structured claims from your memory and return them in simple light sentences. Format your response as a JSON array of objects, where each object has a 'claim' field with the claim text. Example: [{\"claim\": \"First claim here\"}, {\"claim\": \"Second claim here\"}]";
+      "Extract ONLY interesting, debatable, or controversial claims from the article. Focus on claims that:\n" +
+      "- Are arguable or could be disputed by different sources\n" +
+      "- Make specific assertions that require evidence or could be challenged\n" +
+      "- Present interesting hypotheses, conclusions, or interpretations\n" +
+      "- Are substantive statements that would benefit from peer review or validation\n\n" +
+      "EXCLUDE:\n" +
+      "- Basic facts, definitions, or common knowledge\n" +
+      "- Simple descriptions or uncontroversial information\n" +
+      "- Undisputed data points or statistics without interpretation\n" +
+      "- Generic statements that everyone would agree with\n\n" +
+      "Return ONLY the most interesting and debatable claims. Format your response as a JSON array of objects, where each object has a 'claim' field with the claim text.\n" +
+      'Example: [{"claim": "First debatable claim here"}, {"claim": "Second controversial claim here"}]';
 
     const agentResponse = await agentExecutor.invoke({
       input: prompt,
@@ -48,10 +59,13 @@ export async function POST(req: NextRequest) {
       // Try to parse JSON from the response
       // The agent might return JSON wrapped in markdown code blocks
       let jsonStr = output.trim();
-      
+
       // Remove markdown code blocks if present
-      jsonStr = jsonStr.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      
+      jsonStr = jsonStr
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
+
       // Try to extract JSON array from the response
       const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
@@ -68,12 +82,14 @@ export async function POST(req: NextRequest) {
         // Split by newlines or numbered lists
         const lines = output
           .split(/\n+/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0 && !line.match(/^[\[\]{}]/));
+          .map((line: string) => line.trim())
+          .filter(
+            (line: string) => line.length > 0 && !line.match(/^[\[\]{}]/)
+          );
 
         claims = lines
           .slice(0, 20) // Limit to 20 claims
-          .map((line, index) => ({
+          .map((line: string, index: number) => ({
             id: String(index + 1),
             claim: line.replace(/^\d+[\.\)]\s*/, ""), // Remove numbering
             score: undefined,
@@ -106,4 +122,3 @@ export async function POST(req: NextRequest) {
     return Response.json(errorResponse, { status: 500 });
   }
 }
-
