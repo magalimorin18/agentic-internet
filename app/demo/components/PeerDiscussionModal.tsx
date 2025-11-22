@@ -525,8 +525,8 @@ export default function PeerDiscussionModal({
                   )}
                 </div>
                 {discussion.finalAgreement.settlementHash ? (
-                  <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
-                    <p className="text-xs font-semibold text-gray-700 mb-1">
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <p className="text-sm font-semibold text-gray-700 mb-2">
                       Hedera Settlement Hash:
                     </p>
 
@@ -534,11 +534,11 @@ export default function PeerDiscussionModal({
                       href={`https://hashscan.io/testnet/transaction/${discussion.finalAgreement.settlementHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline break-all block"
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all block mb-2"
                     >
                       {discussion.finalAgreement.settlementHash}
                     </a>
-                    <p className="text-xs text-green-600 mt-1 font-semibold">
+                    <p className="text-sm text-green-600 mt-2 font-semibold">
                       ✓ Verified on Hedera Network
                     </p>
                   </div>
