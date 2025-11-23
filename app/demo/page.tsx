@@ -62,16 +62,16 @@ export default function DemoInput() {
 
   const exampleLinks = [
     {
-      title: "The Measurement Problem in Quantum Mechanics",
-      url: "https://arxiv.org/abs/1908.03920",
+      title: "Suitable Conditions for Mycelial Growth of Phellinus spp",
+      url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3755185/",
     },
     {
       title: "CRISPR-Cas9: A Revolutionary Gene Editing Technology",
       url: "https://www.nature.com/articles/nature24644",
     },
     {
-      title: "The Hard Problem of Consciousness",
-      url: "https://www.scholarpedia.org/article/Hard_problem_of_consciousness",
+      title: "Role of glucosyltransferase R in biofilm interactions",
+      url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC7174356/",
     },
   ];
 
