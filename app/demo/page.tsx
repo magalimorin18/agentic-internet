@@ -43,8 +43,11 @@ export default function DemoInput() {
       // Store the initialization result in sessionStorage
       sessionStorage.setItem("agentInitResult", JSON.stringify(data));
 
+      // Store the URL separately in sessionStorage for easy access
+      sessionStorage.setItem("agentUrl", url);
+
       // Navigate to the agent page after successful initialization
-      router.push(`/demo/agent?url=${encodeURIComponent(url)}`);
+      router.push("/demo/agent");
     } catch (error) {
       console.error("Error initializing agent:", error);
       alert(

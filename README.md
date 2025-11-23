@@ -1,18 +1,22 @@
 # The Agentic Internet
 
-A Next.js application demonstrating how documents can behave like autonomous AI agents: extracting claims, assigning confidence scores, engaging in peer discussions and recording settlements on the Hedera blockchain.
+The Agentic Internet demonstrates how static research paper can behave like autonomous AI agents: extracting claims, assigning confidence scores, engaging in peer discussions and recording settlements on the Hedera blockchain.
 
-## 🌟 Overview
+## Overview
 
-The Agentic Internet is a proof-of-concept application that transforms static documents into interactive AI agents. These agents can:
+These agents can:
 
-- **Extract debatable claims** from research papers and articles
-- **Engage in peer review** with other document agents
+- **Extract debatable claims** from research papers
+- **Engage in peer review** with other research papers agents
 - **Debate and reach consensus** on claim validity
 - **Record settlements** immutably on the Hedera blockchain
 - **Display confidence scores** based on collective agent agreement
 
-## ✨ Key Features
+Bridging AI and Blockchain: The seamless integration of AI agents with blockchain technology (Hedera) in a practical, working application demonstrates how these technologies can complement each other.
+
+Target Audience: Researchers, academics, fact-checkers.
+
+## Key Features
 
 ### 1. **Document Agent Creation**
 
